@@ -10,6 +10,8 @@
 	import { projectsStore } from '$lib/stores/projects';
 	import { onMount } from 'svelte';
 
+	const CONFIG_PANEL_KEY = 'sitemap-presenter-config-panel';
+
 	const nodes = sitemapStore.nodes;
 	const zoomLevel = sitemapStore.zoomLevel;
 	const currentProjectId = projectsStore.currentProjectId;
@@ -19,6 +21,10 @@
 	let currentProject = $derived($currentProjectId ? projectsStore.getProject($currentProjectId) : null);
 	let showDashboard = $state(false);
 	let showConfig = $state(true);
+	let showNewProjectModal = $state(false);
+	let newProjectName = $state('');
+	let newProjectDescription = $state('');
+	let newProjectBaseUrl = $state('');
 
 	// Count feedbacks for current project (open vs resolved)
 	let feedbackCounts = $derived.by(() => {
@@ -36,10 +42,43 @@
 
 	function toggleConfig() {
 		showConfig = !showConfig;
+		try {
+			localStorage.setItem(CONFIG_PANEL_KEY, JSON.stringify(showConfig));
+		} catch (e) {
+			console.error('Failed to save config panel state:', e);
+		}
+	}
+
+	function handleCreateProject() {
+		if (!newProjectName.trim() || !newProjectBaseUrl.trim()) return;
+
+		const project = projectsStore.createProject(
+			newProjectName.trim(),
+			newProjectDescription.trim(),
+			newProjectBaseUrl.trim()
+		);
+		projectsStore.selectProject(project.id);
+		sitemapStore.clearAll();
+
+		// Reset form
+		newProjectName = '';
+		newProjectDescription = '';
+		newProjectBaseUrl = '';
+		showNewProjectModal = false;
 	}
 
 	onMount(() => {
 		projectsStore.initialize();
+
+		// Load config panel state
+		try {
+			const savedConfig = localStorage.getItem(CONFIG_PANEL_KEY);
+			if (savedConfig !== null) {
+				showConfig = JSON.parse(savedConfig);
+			}
+		} catch (e) {
+			console.error('Failed to load config panel state:', e);
+		}
 
 		// Load cached data for restored project after a tick
 		setTimeout(() => {
@@ -63,39 +102,17 @@
 	<ProjectDashboard bind:showDashboard />
 
 	<!-- Header -->
-	<header class="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
-		<div class="flex items-center gap-4">
-			<!-- Burger menu -->
-			<button
-				onclick={toggleDashboard}
-				class="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-				title="Projects Dashboard"
-			>
-				<svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M4 6h16M4 12h16M4 18h16"
-					/>
-				</svg>
-			</button>
-
-			<!-- Title -->
+	<header class="bg-white border-b border-gray-200 px-4 py-3 flex items-center z-10">
+		<!-- Left: Title + badges -->
+		<div class="flex items-center gap-4 flex-1">
 			<h1 class="text-xl font-bold text-gray-800">
 				{#if currentProject}
-					Feedbacks for {currentProject.name}
+					{currentProject.name}
 				{:else}
 					Sitemap Presenter
 				{/if}
 			</h1>
 
-			{#if hasNodes}
-				<SearchBar />
-			{/if}
-		</div>
-
-		<div class="flex items-center gap-3">
 			{#if hasNodes && currentProject && (feedbackCounts.open > 0 || feedbackCounts.resolved > 0)}
 				<div class="flex items-center gap-2">
 					{#if feedbackCounts.open > 0}
@@ -110,6 +127,28 @@
 					{/if}
 				</div>
 			{/if}
+		</div>
+
+		<!-- Center: Search -->
+		{#if hasNodes}
+			<div class="flex-1 flex justify-center">
+				<SearchBar />
+			</div>
+		{:else}
+			<div class="flex-1"></div>
+		{/if}
+
+		<!-- Right: New project button + Dropdown -->
+		<div class="flex items-center gap-3 flex-1 justify-end">
+			<button
+				onclick={() => (showNewProjectModal = true)}
+				class="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+				</svg>
+				New project
+			</button>
 			<ProjectSwitcher />
 		</div>
 	</header>
@@ -177,4 +216,67 @@
 
 	<!-- Page Viewer Modal -->
 	<PageViewer />
+
+	<!-- New Project Modal -->
+	{#if showNewProjectModal}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => (showNewProjectModal = false)}>
+			<div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" onclick={(e) => e.stopPropagation()}>
+				<h2 class="text-xl font-bold text-gray-800 mb-4">New Project</h2>
+				<form onsubmit={(e) => { e.preventDefault(); handleCreateProject(); }}>
+					<div class="space-y-4">
+						<div>
+							<label for="project-name" class="block text-sm font-medium text-gray-700 mb-1">Project name *</label>
+							<input
+								id="project-name"
+								type="text"
+								bind:value={newProjectName}
+								placeholder="My Website"
+								class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+								required
+							/>
+						</div>
+						<div>
+							<label for="project-url" class="block text-sm font-medium text-gray-700 mb-1">Base URL *</label>
+							<input
+								id="project-url"
+								type="url"
+								bind:value={newProjectBaseUrl}
+								placeholder="https://example.com"
+								class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+								required
+							/>
+						</div>
+						<div>
+							<label for="project-description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+							<textarea
+								id="project-description"
+								bind:value={newProjectDescription}
+								placeholder="Optional description..."
+								rows="2"
+								class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+							></textarea>
+						</div>
+					</div>
+					<div class="flex justify-end gap-3 mt-6">
+						<button
+							type="button"
+							onclick={() => (showNewProjectModal = false)}
+							class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+						>
+							Cancel
+						</button>
+						<button
+							type="submit"
+							disabled={!newProjectName.trim() || !newProjectBaseUrl.trim()}
+							class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							Create
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	{/if}
 </div>
