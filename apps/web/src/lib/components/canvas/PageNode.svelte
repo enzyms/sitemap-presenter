@@ -29,14 +29,24 @@
 	let lod = $derived($zoomLevel > 0.3 ? 'thumbnail' : 'full');
 	let showIframe = $derived(lod === 'full' && selected);
 
-	// Get feedback counts for this page (reactive via $projects)
+	// Get feedback counts for this page
+	// First check if feedbackStats is embedded in node data (from cache load)
+	// Then fall back to computing from projects store (for live updates)
 	let feedbackStats = $derived.by(() => {
-		if (!$currentProjectId) return { total: 0, open: 0, resolved: 0, allResolved: false };
-		// Use $projects for reactivity
-		const project = $projects.find(p => p.id === $currentProjectId);
-		if (!project?.cachedData?.feedbackMarkers) return { total: 0, open: 0, resolved: 0, allResolved: false };
+		// Use embedded stats if available (set during cache load)
+		if (data.feedbackStats && data.feedbackStats.total > 0) {
+			return data.feedbackStats;
+		}
 
-		// Extract path from URL
+		// Fall back to computing from projects store
+		if (!$currentProjectId) {
+			return { total: 0, open: 0, resolved: 0, allResolved: false };
+		}
+		const project = $projects.find(p => p.id === $currentProjectId);
+		if (!project?.cachedData?.feedbackMarkers) {
+			return { total: 0, open: 0, resolved: 0, allResolved: false };
+		}
+
 		try {
 			const url = new URL(data.url);
 			const pagePath = url.pathname;

@@ -302,6 +302,11 @@ function createSitemapStore() {
 		searchQuery.set('');
 	}
 
+	// Force a refresh of all nodes (creates new object references to trigger re-render)
+	function refreshNodes() {
+		nodes.update(current => current.map(n => ({ ...n, data: { ...n.data } })));
+	}
+
 	function getCurrentData() {
 		return {
 			nodes: get(nodes),
@@ -343,6 +348,7 @@ function createSitemapStore() {
 		reset,
 		loadFromCache,
 		getCurrentData,
+		refreshNodes,
 		selectNode: (id: string | null) => selectedNodeId.set(id),
 		setSearchQuery: (query: string) => searchQuery.set(query),
 		setZoomLevel: (level: number) => zoomLevel.set(level)

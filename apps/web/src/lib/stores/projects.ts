@@ -62,12 +62,26 @@ function createProjectsStore() {
 	// Initialize from storage (only in browser)
 	function initialize() {
 		const stored = loadFromStorage();
+
+		// Debug: log what we're loading
+		console.log('[ProjectsStore] Initializing with', stored.length, 'projects');
+		stored.forEach(p => {
+			const markerCount = p.cachedData?.feedbackMarkers
+				? Object.values(p.cachedData.feedbackMarkers).flat().length
+				: 0;
+			const markerPages = p.cachedData?.feedbackMarkers
+				? Object.keys(p.cachedData.feedbackMarkers)
+				: [];
+			console.log(`[ProjectsStore] Project "${p.name}": ${markerCount} markers on pages:`, markerPages);
+		});
+
 		projects.set(stored);
 
 		// Restore last selected project
 		const savedProjectId = loadCurrentProjectId();
 		if (savedProjectId && stored.some(p => p.id === savedProjectId)) {
 			currentProjectId.set(savedProjectId);
+			console.log('[ProjectsStore] Restored project ID:', savedProjectId);
 		}
 
 		isLoaded.set(true);

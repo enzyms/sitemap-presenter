@@ -1,5 +1,12 @@
 import type { Node, Edge } from '@xyflow/svelte';
 
+export interface FeedbackStats {
+	total: number;
+	open: number;
+	resolved: number;
+	allResolved: boolean;
+}
+
 export interface PageData extends Record<string, unknown> {
 	url: string;
 	title: string;
@@ -14,6 +21,7 @@ export interface PageData extends Record<string, unknown> {
 	externalLinks: string[];
 	statusCode?: number;
 	error?: string;
+	feedbackStats?: FeedbackStats;
 }
 
 export type PageNode = Node<PageData, 'page'>;

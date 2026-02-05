@@ -132,6 +132,8 @@
 			const project = projectsStore.getProject($currentProjectId);
 			const existingMarkers = project?.cachedData?.feedbackMarkers || {};
 
+			console.log(`[PageViewer] Saving ${markers.length} markers for path "${pagePath}" to project ${$currentProjectId}`);
+
 			projectsStore.saveFeedbackMarkers($currentProjectId, {
 				...existingMarkers,
 				[pagePath]: markers
@@ -146,18 +148,23 @@
 		const data = event.data as IframeToSitemapMessage | undefined;
 		if (!data?.type?.startsWith('FEEDBACK_')) return;
 
+		console.log('[PageViewer] Received message:', data.type, data);
+
 		switch (data.type) {
 			case 'FEEDBACK_MARKERS_RESPONSE':
+				console.log('[PageViewer] MARKERS_RESPONSE:', data.markers.length, 'markers');
 				feedbackMarkers = data.markers;
 				saveMarkersToCache(data.markers);
 				break;
 
 			case 'FEEDBACK_MARKER_CREATED':
+				console.log('[PageViewer] MARKER_CREATED:', data.marker);
 				feedbackMarkers = [...feedbackMarkers, data.marker];
 				saveMarkersToCache(feedbackMarkers);
 				break;
 
 			case 'FEEDBACK_MARKER_UPDATED':
+				console.log('[PageViewer] MARKER_UPDATED:', data.marker);
 				feedbackMarkers = feedbackMarkers.map((m) =>
 					m.id === data.marker.id ? data.marker : m
 				);
@@ -165,6 +172,7 @@
 				break;
 
 			case 'FEEDBACK_MARKER_DELETED':
+				console.log('[PageViewer] MARKER_DELETED:', data.markerId);
 				feedbackMarkers = feedbackMarkers.filter((m) => m.id !== data.markerId);
 				saveMarkersToCache(feedbackMarkers);
 				break;
@@ -177,6 +185,7 @@
 
 			case 'FEEDBACK_NAVIGATION':
 				// Iframe navigated to a new page - update viewer, node, and markers
+				console.log('[PageViewer] NAVIGATION:', data.url, 'with', data.markers?.length || 0, 'markers');
 				handleIframeNavigation(data.url, data.title, data.markers);
 				break;
 		}
@@ -273,7 +282,7 @@
 	<!-- Viewer -->
 	<div class="fixed inset-4 z-50 flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden">
 		<!-- Header -->
-		<header class="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+		<header class="flex items-center justify-between px-4 py-3 border-b bg-gray-200">
 			<div class="flex items-center gap-4 flex-1 min-w-0">
 				<h2 class="text-lg font-semibold text-gray-800 truncate">{$pageTitle}</h2>
 				<a

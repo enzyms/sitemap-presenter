@@ -18,7 +18,6 @@
 	const projects = projectsStore.projects;
 
 	let hasNodes = $derived($nodes.length > 0);
-	let currentProject = $derived($currentProjectId ? projectsStore.getProject($currentProjectId) : null);
 	let showDashboard = $state(false);
 	let showConfig = $state(true);
 	let showNewProjectModal = $state(false);
@@ -26,14 +25,36 @@
 	let newProjectDescription = $state('');
 	let newProjectBaseUrl = $state('');
 
+	// Compute current project directly from $projects for full reactivity
+	let currentProject = $derived.by(() => {
+		if (!$currentProjectId) return null;
+		return $projects.find(p => p.id === $currentProjectId) ?? null;
+	});
+
 	// Count feedbacks for current project (open vs resolved)
 	let feedbackCounts = $derived.by(() => {
-		if (!currentProject?.cachedData?.feedbackMarkers) return { open: 0, resolved: 0 };
-		const allMarkers = Object.values(currentProject.cachedData.feedbackMarkers).flat();
+		if (!$currentProjectId) return { open: 0, resolved: 0 };
+		const project = $projects.find(p => p.id === $currentProjectId);
+		if (!project?.cachedData?.feedbackMarkers) return { open: 0, resolved: 0 };
+		const allMarkers = Object.values(project.cachedData.feedbackMarkers).flat();
 		return {
 			open: allMarkers.filter(m => m.status === 'open').length,
 			resolved: allMarkers.filter(m => m.status === 'resolved').length
 		};
+	});
+
+	// Debug: track when projects/feedbacks change
+	$effect(() => {
+		const projectId = $currentProjectId;
+		const allProjects = $projects;
+		const project = projectId ? allProjects.find(p => p.id === projectId) : null;
+		if (project) {
+			const markers = project.cachedData?.feedbackMarkers;
+			const count = markers ? Object.values(markers).flat().length : 0;
+			console.log(`[+page] Current project "${project.name}" has ${count} feedback markers, projects.length=${allProjects.length}`);
+		} else {
+			console.log(`[+page] No current project. projectId=${projectId}, projects.length=${allProjects.length}`);
+		}
 	});
 
 	function toggleDashboard() {
@@ -85,7 +106,38 @@
 			if ($currentProjectId && $nodes.length === 0) {
 				const cachedData = projectsStore.getCachedData($currentProjectId);
 				if (cachedData) {
-					sitemapStore.loadFromCache(cachedData.nodes, cachedData.edges);
+					// Augment nodes with feedback stats before loading
+					const feedbackMarkers = cachedData.feedbackMarkers || {};
+					const nodesWithFeedback = cachedData.nodes.map(node => {
+						try {
+							const url = new URL(node.data.url);
+							const pagePath = url.pathname;
+							const markers = feedbackMarkers[pagePath] || [];
+							const open = markers.filter(m => m.status === 'open').length;
+							const resolved = markers.filter(m => m.status === 'resolved').length;
+							return {
+								...node,
+								data: {
+									...node.data,
+									feedbackStats: {
+										total: markers.length,
+										open,
+										resolved,
+										allResolved: markers.length > 0 && open === 0
+									}
+								}
+							};
+						} catch {
+							return node;
+						}
+					});
+
+					sitemapStore.loadFromCache(nodesWithFeedback, cachedData.edges);
+
+					// Log feedback markers loaded from cache
+					const totalMarkers = Object.values(feedbackMarkers).flat().length;
+					const pagesWithFeedback = Object.keys(feedbackMarkers).length;
+					console.log(`[Sitemap] Loaded ${totalMarkers} feedback markers across ${pagesWithFeedback} pages`);
 				}
 			}
 		}, 0);
