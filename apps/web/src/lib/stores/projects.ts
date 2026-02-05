@@ -2,9 +2,32 @@ import { writable, get } from 'svelte/store';
 import type { Project, ProjectCachedData, PageNode, LinkEdge, FeedbackMarker } from '$lib/types';
 
 const STORAGE_KEY = 'sitemap-presenter-projects';
+const CURRENT_PROJECT_KEY = 'sitemap-presenter-current-project';
 
 function generateId(): string {
 	return `proj-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+function loadCurrentProjectId(): string | null {
+	if (typeof window === 'undefined') return null;
+	try {
+		return localStorage.getItem(CURRENT_PROJECT_KEY);
+	} catch {
+		return null;
+	}
+}
+
+function saveCurrentProjectId(id: string | null): void {
+	if (typeof window === 'undefined') return;
+	try {
+		if (id) {
+			localStorage.setItem(CURRENT_PROJECT_KEY, id);
+		} else {
+			localStorage.removeItem(CURRENT_PROJECT_KEY);
+		}
+	} catch (e) {
+		console.error('Failed to save current project ID:', e);
+	}
 }
 
 function loadFromStorage(): Project[] {
@@ -40,6 +63,13 @@ function createProjectsStore() {
 	function initialize() {
 		const stored = loadFromStorage();
 		projects.set(stored);
+
+		// Restore last selected project
+		const savedProjectId = loadCurrentProjectId();
+		if (savedProjectId && stored.some(p => p.id === savedProjectId)) {
+			currentProjectId.set(savedProjectId);
+		}
+
 		isLoaded.set(true);
 	}
 
@@ -162,6 +192,7 @@ function createProjectsStore() {
 
 	function selectProject(id: string | null): void {
 		currentProjectId.set(id);
+		saveCurrentProjectId(id);
 	}
 
 	function clearCache(id: string): void {

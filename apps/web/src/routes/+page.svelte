@@ -20,13 +20,14 @@
 	let showDashboard = $state(false);
 	let showConfig = $state(true);
 
-	// Count total feedbacks for current project
-	let totalFeedbacks = $derived.by(() => {
-		if (!currentProject?.cachedData?.feedbackMarkers) return 0;
-		return Object.values(currentProject.cachedData.feedbackMarkers).reduce(
-			(sum, markers) => sum + markers.length,
-			0
-		);
+	// Count feedbacks for current project (open vs resolved)
+	let feedbackCounts = $derived.by(() => {
+		if (!currentProject?.cachedData?.feedbackMarkers) return { open: 0, resolved: 0 };
+		const allMarkers = Object.values(currentProject.cachedData.feedbackMarkers).flat();
+		return {
+			open: allMarkers.filter(m => m.status === 'open').length,
+			resolved: allMarkers.filter(m => m.status === 'resolved').length
+		};
 	});
 
 	function toggleDashboard() {
@@ -39,6 +40,16 @@
 
 	onMount(() => {
 		projectsStore.initialize();
+
+		// Load cached data for restored project after a tick
+		setTimeout(() => {
+			if ($currentProjectId && $nodes.length === 0) {
+				const cachedData = projectsStore.getCachedData($currentProjectId);
+				if (cachedData) {
+					sitemapStore.loadFromCache(cachedData.nodes, cachedData.edges);
+				}
+			}
+		}, 0);
 	});
 </script>
 
@@ -85,10 +96,19 @@
 		</div>
 
 		<div class="flex items-center gap-3">
-			{#if hasNodes && currentProject && totalFeedbacks > 0}
-				<span class="px-2 py-1 bg-orange-100 text-orange-700 rounded text-sm font-medium">
-					{totalFeedbacks} feedbacks
-				</span>
+			{#if hasNodes && currentProject && (feedbackCounts.open > 0 || feedbackCounts.resolved > 0)}
+				<div class="flex items-center gap-2">
+					{#if feedbackCounts.open > 0}
+						<span class="px-2 py-1 bg-orange-100 text-orange-700 rounded text-sm font-medium">
+							{feedbackCounts.open} open
+						</span>
+					{/if}
+					{#if feedbackCounts.resolved > 0}
+						<span class="px-2 py-1 bg-green-100 text-green-700 rounded text-sm font-medium">
+							{feedbackCounts.resolved} resolved
+						</span>
+					{/if}
+				</div>
 			{/if}
 			<ProjectSwitcher />
 		</div>

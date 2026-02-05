@@ -15,6 +15,7 @@
 
 	const zoomLevel = sitemapStore.zoomLevel;
 	const currentProjectId = projectsStore.currentProjectId;
+	const projects = projectsStore.projects;
 	const searchQuery = sitemapStore.searchQuery;
 
 	// Check if node matches search query
@@ -28,20 +29,28 @@
 	let lod = $derived($zoomLevel > 0.3 ? 'thumbnail' : 'full');
 	let showIframe = $derived(lod === 'full' && selected);
 
-	// Get feedback count for this page
-	let feedbackCount = $derived.by(() => {
-		if (!$currentProjectId) return 0;
-		const project = projectsStore.getProject($currentProjectId);
-		if (!project?.cachedData?.feedbackMarkers) return 0;
+	// Get feedback counts for this page (reactive via $projects)
+	let feedbackStats = $derived.by(() => {
+		if (!$currentProjectId) return { total: 0, open: 0, resolved: 0, allResolved: false };
+		// Use $projects for reactivity
+		const project = $projects.find(p => p.id === $currentProjectId);
+		if (!project?.cachedData?.feedbackMarkers) return { total: 0, open: 0, resolved: 0, allResolved: false };
 
 		// Extract path from URL
 		try {
 			const url = new URL(data.url);
 			const pagePath = url.pathname;
-			const markers = project.cachedData.feedbackMarkers[pagePath];
-			return markers?.length || 0;
+			const markers = project.cachedData.feedbackMarkers[pagePath] || [];
+			const open = markers.filter(m => m.status === 'open').length;
+			const resolved = markers.filter(m => m.status === 'resolved').length;
+			return {
+				total: markers.length,
+				open,
+				resolved,
+				allResolved: markers.length > 0 && open === 0
+			};
 		} catch {
-			return 0;
+			return { total: 0, open: 0, resolved: 0, allResolved: false };
 		}
 	});
 
@@ -97,8 +106,12 @@
 	{#if lod === 'thumbnail'}
 		<!-- Thumbnail view: screenshot + title (larger size) -->
 		<div
-			class="w-96 h-64 rounded-lg overflow-hidden shadow-lg bg-white border-2 {depthColor}"
+			class="relative w-96 h-64 rounded-lg overflow-hidden shadow-lg bg-white border-2 {depthColor}"
 		>
+			<!-- Overlay for nodes with feedback (green if all resolved, orange otherwise) -->
+			{#if feedbackStats.total > 0}
+				<div class="absolute inset-0 pointer-events-none z-10 {feedbackStats.allResolved ? 'bg-green-500/5' : 'bg-orange-500/5'}"></div>
+			{/if}
 			<div class="relative h-48 bg-gray-100">
 				{#if data.thumbnailUrl}
 					<img
@@ -131,26 +144,31 @@
 				>
 					Depth: {data.depth}
 				</div>
-				<!-- Feedback count badge -->
-				{#if feedbackCount > 0}
-					<div class="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-xs rounded-full font-medium">
-						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			</div>
+			<div class="p-3 bg-white flex items-center justify-between gap-2">
+				<div class="min-w-0 flex-1">
+					<p class="truncate text-base font-medium text-gray-800">{data.title}</p>
+					<p class="truncate text-sm text-gray-500">{data.url}</p>
+				</div>
+				{#if feedbackStats.total > 0}
+					<div class="flex items-center gap-1.5 px-3 py-1.5 text-white text-sm rounded-full font-semibold flex-shrink-0 {feedbackStats.allResolved ? 'bg-green-500' : 'bg-orange-500'}">
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
 						</svg>
-						{feedbackCount}
+						{feedbackStats.total}
 					</div>
 				{/if}
-			</div>
-			<div class="p-3 bg-white">
-				<p class="truncate text-base font-medium text-gray-800">{data.title}</p>
-				<p class="truncate text-sm text-gray-500">{data.url}</p>
 			</div>
 		</div>
 	{:else}
 		<!-- Full view: larger with potential iframe -->
 		<div
-			class="w-[480px] h-[400px] rounded-lg overflow-hidden shadow-xl bg-white border-2 {depthColor}"
+			class="relative w-[480px] h-[400px] rounded-lg overflow-hidden shadow-xl bg-white border-2 {depthColor}"
 		>
+			<!-- Overlay for nodes with feedback (green if all resolved, orange otherwise) -->
+			{#if feedbackStats.total > 0}
+				<div class="absolute inset-0 pointer-events-none z-10 {feedbackStats.allResolved ? 'bg-green-500/5' : 'bg-orange-500/5'}"></div>
+			{/if}
 			<div class="relative h-[340px] bg-gray-100">
 				{#if showIframe}
 					<iframe
@@ -183,15 +201,6 @@
 				<div class="absolute top-2 left-2 px-2 py-1 bg-black/50 text-white text-sm rounded">
 					Depth: {data.depth}
 				</div>
-				<!-- Feedback count badge -->
-				{#if feedbackCount > 0}
-					<div class="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-sm rounded-full font-medium">
-						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-						</svg>
-						{feedbackCount}
-					</div>
-				{/if}
 				<!-- Links count -->
 				<div class="absolute bottom-2 left-2 flex gap-2">
 					<span class="px-2 py-1 bg-blue-500/80 text-white text-xs rounded">
@@ -202,9 +211,19 @@
 					</span>
 				</div>
 			</div>
-			<div class="p-3 bg-white">
-				<p class="truncate text-base font-medium text-gray-800">{data.title}</p>
-				<p class="truncate text-sm text-gray-500">{data.url}</p>
+			<div class="p-3 bg-white flex items-center justify-between gap-2">
+				<div class="min-w-0 flex-1">
+					<p class="truncate text-base font-medium text-gray-800">{data.title}</p>
+					<p class="truncate text-sm text-gray-500">{data.url}</p>
+				</div>
+				{#if feedbackStats.total > 0}
+					<div class="flex items-center gap-1.5 px-3 py-1.5 text-white text-sm rounded-full font-semibold flex-shrink-0 {feedbackStats.allResolved ? 'bg-green-500' : 'bg-orange-500'}">
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+						</svg>
+						{feedbackStats.total}
+					</div>
+				{/if}
 			</div>
 		</div>
 	{/if}
