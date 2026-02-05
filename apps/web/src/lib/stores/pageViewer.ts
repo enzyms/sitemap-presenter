@@ -24,6 +24,15 @@ function createPageViewerStore() {
 		isOpen.set(false);
 	}
 
+	function updateCurrentPage(url: string, title: string) {
+		pageUrl.set(url);
+		pageTitle.set(title);
+	}
+
+	function updateScreenshot(screenshot: string | null) {
+		screenshotUrl.set(screenshot);
+	}
+
 	return {
 		isOpen,
 		pageUrl,
@@ -31,7 +40,9 @@ function createPageViewerStore() {
 		screenshotUrl,
 		fullScreenshotUrl,
 		openViewer,
-		closeViewer
+		closeViewer,
+		updateCurrentPage,
+		updateScreenshot
 	};
 }
 

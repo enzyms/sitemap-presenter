@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { pageViewerStore } from '$lib/stores/pageViewer';
+	import { sitemapStore } from '$lib/stores/sitemap';
+	import { projectsStore } from '$lib/stores/projects';
 	import FeedbackSidebar from './FeedbackSidebar.svelte';
 	import type {
 		FeedbackMarker,
@@ -8,6 +11,8 @@
 		SitemapToIframeMessage,
 		MarkerStatus
 	} from '$lib/types';
+
+	const currentProjectId = projectsStore.currentProjectId;
 
 	const isOpen = pageViewerStore.isOpen;
 	const pageUrl = pageViewerStore.pageUrl;
@@ -102,11 +107,8 @@
 	function handleIframeLoad() {
 		iframeLoaded = true;
 		if (loadTimeout) clearTimeout(loadTimeout);
-		// Clear existing markers and request new ones for the current page
-		// This handles both initial load and in-iframe navigation
-		feedbackMarkers = [];
-		highlightedMarkerId = null;
-		setTimeout(requestMarkers, 100);
+		// Markers are now received via FEEDBACK_NAVIGATION message from the iframe
+		// No need to request them separately
 	}
 
 	function handleIframeError() {
@@ -120,6 +122,25 @@
 		if (loadTimeout) clearTimeout(loadTimeout);
 	}
 
+	// Save current markers to project cache
+	function saveMarkersToCache(markers: FeedbackMarker[]): void {
+		if (!$currentProjectId || !$pageUrl) return;
+
+		try {
+			const url = new URL($pageUrl);
+			const pagePath = url.pathname;
+			const project = projectsStore.getProject($currentProjectId);
+			const existingMarkers = project?.cachedData?.feedbackMarkers || {};
+
+			projectsStore.saveFeedbackMarkers($currentProjectId, {
+				...existingMarkers,
+				[pagePath]: markers
+			});
+		} catch (e) {
+			console.error('Failed to save feedback markers:', e);
+		}
+	}
+
 	// Handle messages from iframe
 	function handleMessage(event: MessageEvent) {
 		const data = event.data as IframeToSitemapMessage | undefined;
@@ -128,20 +149,24 @@
 		switch (data.type) {
 			case 'FEEDBACK_MARKERS_RESPONSE':
 				feedbackMarkers = data.markers;
+				saveMarkersToCache(data.markers);
 				break;
 
 			case 'FEEDBACK_MARKER_CREATED':
 				feedbackMarkers = [...feedbackMarkers, data.marker];
+				saveMarkersToCache(feedbackMarkers);
 				break;
 
 			case 'FEEDBACK_MARKER_UPDATED':
 				feedbackMarkers = feedbackMarkers.map((m) =>
 					m.id === data.marker.id ? data.marker : m
 				);
+				saveMarkersToCache(feedbackMarkers);
 				break;
 
 			case 'FEEDBACK_MARKER_DELETED':
 				feedbackMarkers = feedbackMarkers.filter((m) => m.id !== data.markerId);
+				saveMarkersToCache(feedbackMarkers);
 				break;
 
 			case 'FEEDBACK_ACTION_CONFIRMED':
@@ -149,7 +174,41 @@
 					requestMarkers();
 				}
 				break;
+
+			case 'FEEDBACK_NAVIGATION':
+				// Iframe navigated to a new page - update viewer, node, and markers
+				handleIframeNavigation(data.url, data.title, data.markers);
+				break;
 		}
+	}
+
+	// Handle navigation within the iframe
+	function handleIframeNavigation(newUrl: string, newTitle: string, markers: FeedbackMarker[]) {
+		// Update the viewer's displayed URL and title
+		pageViewerStore.updateCurrentPage(newUrl, newTitle);
+
+		// Find the node with this URL in the sitemap
+		const nodes = get(sitemapStore.nodes);
+		const matchingNode = nodes.find((n) => n.data.url === newUrl);
+
+		if (matchingNode) {
+			// Select the node in the sitemap canvas
+			sitemapStore.selectNode(matchingNode.id);
+
+			// Update screenshot if available
+			if (matchingNode.data.fullScreenshotUrl || matchingNode.data.thumbnailUrl) {
+				pageViewerStore.updateScreenshot(
+					matchingNode.data.fullScreenshotUrl || matchingNode.data.thumbnailUrl || null
+				);
+			}
+		}
+
+		// Update markers directly from the navigation message (spread to ensure new reference)
+		feedbackMarkers = markers ? [...markers] : [];
+		highlightedMarkerId = null;
+
+		// Save markers to project cache for display on nodes
+		saveMarkersToCache(feedbackMarkers);
 	}
 
 	// Sidebar callbacks

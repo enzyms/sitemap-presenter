@@ -225,12 +225,22 @@ export interface ActionConfirmMessage {
 	success: boolean;
 }
 
+/** Notification: iframe navigated to a new page */
+export interface NavigationMessage {
+	type: 'FEEDBACK_NAVIGATION';
+	url: string;
+	pathname: string;
+	title: string;
+	markers: FeedbackMarker[]; // All markers included directly
+}
+
 export type IframeToSitemapMessage =
 	| MarkersResponseMessage
 	| MarkerCreatedMessage
 	| MarkerUpdatedMessage
 	| MarkerDeletedMessage
-	| ActionConfirmMessage;
+	| ActionConfirmMessage
+	| NavigationMessage;
 
 // API response types
 export interface StartCrawlResponse {

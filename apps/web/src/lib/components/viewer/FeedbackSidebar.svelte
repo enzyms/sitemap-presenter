@@ -23,6 +23,7 @@
 
 	let statusFilter = $state<'all' | 'open' | 'resolved'>('all');
 	let expandedMarkerId = $state<string | null>(null);
+	let openMenuId = $state<string | null>(null);
 	let commentText = $state('');
 
 	let filteredMarkers = $derived(
@@ -31,6 +32,7 @@
 
 	let openCount = $derived(markers.filter((m) => m.status === 'open').length);
 	let resolvedCount = $derived(markers.filter((m) => m.status === 'resolved').length);
+
 
 	function formatDate(dateStr: string): string {
 		return new Date(dateStr).toLocaleDateString('fr-FR', {
@@ -50,14 +52,27 @@
 	}
 
 	function handleClick(marker: FeedbackMarker): void {
+		// Highlight the marker in the iframe (opens popup there via MarkerDisplay)
+		// Do NOT toggle expandedMarkerId here - comments panel in sidebar stays via kebab menu only
 		onMarkerClick(marker);
-		expandedMarkerId = expandedMarkerId === marker.id ? null : marker.id;
+	}
+
+	function toggleMenu(event: MouseEvent, markerId: string): void {
+		event.stopPropagation();
+		openMenuId = openMenuId === markerId ? null : markerId;
+	}
+
+	function handleExpandComments(event: MouseEvent, markerId: string): void {
+		event.stopPropagation();
+		expandedMarkerId = expandedMarkerId === markerId ? null : markerId;
+		openMenuId = null;
 	}
 
 	function handleStatusToggle(event: MouseEvent, marker: FeedbackMarker): void {
 		event.stopPropagation();
 		const newStatus: MarkerStatus = marker.status === 'open' ? 'resolved' : 'open';
 		onStatusChange(marker.id, newStatus);
+		openMenuId = null;
 	}
 
 	function handleDelete(event: MouseEvent, markerId: string): void {
@@ -65,6 +80,7 @@
 		if (confirm('Delete this marker?')) {
 			onDelete(markerId);
 		}
+		openMenuId = null;
 	}
 
 	function handleCommentSubmit(event: Event, markerId: string): void {
@@ -80,7 +96,14 @@
 			handleCommentSubmit(event, markerId);
 		}
 	}
+
+	// Close menu when clicking outside
+	function handleWindowClick(): void {
+		openMenuId = null;
+	}
 </script>
+
+<svelte:window onclick={handleWindowClick} />
 
 <div class="w-80 border-l bg-white flex flex-col h-full overflow-hidden">
 	<!-- Header -->
@@ -147,7 +170,7 @@
 						onmouseenter={() => handleMouseEnter(marker)}
 						onmouseleave={handleMouseLeave}
 					>
-						<!-- Main row -->
+						<!-- Main row - click only highlights -->
 						<div class="p-3 cursor-pointer hover:bg-gray-50" onclick={() => handleClick(marker)}>
 							<div class="flex items-start gap-3">
 								<!-- Marker number -->
@@ -160,7 +183,7 @@
 								</div>
 
 								<div class="flex-1 min-w-0">
-									<!-- Element info + actions -->
+									<!-- Element info + kebab menu -->
 									<div class="flex items-center justify-between gap-2">
 										<div class="flex items-center gap-2">
 											<span class="text-xs font-mono text-gray-500"
@@ -177,62 +200,67 @@
 											</span>
 										</div>
 
-										<!-- Quick actions -->
-										<div class="flex items-center gap-1">
+										<!-- Kebab menu -->
+										<div class="relative">
 											<button
-												onclick={(e) => handleStatusToggle(e, marker)}
+												onclick={(e) => toggleMenu(e, marker.id)}
 												class="p-1 rounded hover:bg-gray-200 transition-colors"
-												title={marker.status === 'open' ? 'Mark resolved' : 'Reopen'}
-											>
-												{#if marker.status === 'open'}
-													<svg
-														class="w-4 h-4 text-green-600"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M5 13l4 4L19 7"
-														/>
-													</svg>
-												{:else}
-													<svg
-														class="w-4 h-4 text-orange-600"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-														/>
-													</svg>
-												{/if}
-											</button>
-											<button
-												onclick={(e) => handleDelete(e, marker.id)}
-												class="p-1 rounded hover:bg-red-100 transition-colors"
-												title="Delete"
+												title="Actions"
 											>
 												<svg
-													class="w-4 h-4 text-red-500"
-													fill="none"
-													stroke="currentColor"
+													class="w-4 h-4 text-gray-500"
+													fill="currentColor"
 													viewBox="0 0 24 24"
 												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-													/>
+													<circle cx="12" cy="5" r="2" />
+													<circle cx="12" cy="12" r="2" />
+													<circle cx="12" cy="19" r="2" />
 												</svg>
 											</button>
+
+											<!-- Dropdown menu -->
+											{#if openMenuId === marker.id}
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
+												<div
+													class="absolute right-0 top-full mt-1 w-40 bg-white rounded-md shadow-lg border z-10"
+													onclick={(e) => e.stopPropagation()}
+												>
+													<button
+														onclick={(e) => handleExpandComments(e, marker.id)}
+														class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+													>
+														<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+														</svg>
+														{expandedMarkerId === marker.id ? 'Hide comments' : 'View comments'}
+													</button>
+													<button
+														onclick={(e) => handleStatusToggle(e, marker)}
+														class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+													>
+														{#if marker.status === 'open'}
+															<svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+															</svg>
+															Mark resolved
+														{:else}
+															<svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+															</svg>
+															Reopen
+														{/if}
+													</button>
+													<button
+														onclick={(e) => handleDelete(e, marker.id)}
+														class="w-full px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
+													>
+														<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+														</svg>
+														Delete
+													</button>
+												</div>
+											{/if}
 										</div>
 									</div>
 

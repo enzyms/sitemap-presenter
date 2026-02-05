@@ -2,9 +2,13 @@
 	import { projectsStore } from '$lib/stores/projects';
 	import { sitemapStore } from '$lib/stores/sitemap';
 	import { configStore } from '$lib/stores/config';
-	import { onMount } from 'svelte';
 
-	let showDashboard = $state(true);
+	interface Props {
+		showDashboard: boolean;
+	}
+
+	let { showDashboard = $bindable(false) }: Props = $props();
+
 	let showCreateForm = $state(false);
 	let newProjectName = $state('');
 	let newProjectDescription = $state('');
@@ -12,10 +16,6 @@
 
 	const projects = projectsStore.projects;
 	const currentProjectId = projectsStore.currentProjectId;
-
-	onMount(() => {
-		projectsStore.initialize();
-	});
 
 	function createProject() {
 		if (!newProjectName.trim() || !newProjectUrl.trim()) return;
@@ -72,36 +72,18 @@
 		});
 	}
 
-	function toggleDashboard() {
-		showDashboard = !showDashboard;
-	}
-
 	function closeDashboard() {
-		if ($currentProjectId) {
-			showDashboard = false;
-		}
+		showDashboard = false;
 	}
 </script>
 
-<!-- Toggle button (always visible) -->
-<button
-	onclick={toggleDashboard}
-	class="fixed top-20 left-4 z-30 bg-white px-3 py-2 rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-200"
-	title="Projects Dashboard"
->
-	<svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-		<path
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			stroke-width="2"
-			d="M4 6h16M4 12h16M4 18h16"
-		/>
-	</svg>
-</button>
-
 {#if showDashboard}
-	<div class="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4">
-		<div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4" onclick={closeDashboard}>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col" onclick={(e) => e.stopPropagation()}>
 			<!-- Header -->
 			<div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
 				<h2 class="text-2xl font-bold text-gray-800">Projects Dashboard</h2>
@@ -146,37 +128,37 @@
 				{#if showCreateForm}
 					<div class="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
 						<h3 class="text-lg font-semibold mb-4">Create New Project</h3>
-				<div class="space-y-3">
-					<div>
-						<label for="project-name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-						<input
-							id="project-name"
-							type="text"
-							bind:value={newProjectName}
-							placeholder="My Awesome Site"
-							class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-						/>
-					</div>
-					<div>
-						<label for="project-description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-						<input
-							id="project-description"
-							type="text"
-							bind:value={newProjectDescription}
-							placeholder="Optional description"
-							class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-						/>
-					</div>
-					<div>
-						<label for="project-url" class="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
-						<input
-							id="project-url"
-							type="url"
-							bind:value={newProjectUrl}
-							placeholder="https://example.com"
-							class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-						/>
-					</div>
+						<div class="space-y-3">
+							<div>
+								<label for="project-name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+								<input
+									id="project-name"
+									type="text"
+									bind:value={newProjectName}
+									placeholder="My Awesome Site"
+									class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+								/>
+							</div>
+							<div>
+								<label for="project-description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+								<input
+									id="project-description"
+									type="text"
+									bind:value={newProjectDescription}
+									placeholder="Optional description"
+									class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+								/>
+							</div>
+							<div>
+								<label for="project-url" class="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
+								<input
+									id="project-url"
+									type="url"
+									bind:value={newProjectUrl}
+									placeholder="https://example.com"
+									class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+								/>
+							</div>
 							<div class="flex gap-2">
 								<button
 									onclick={createProject}

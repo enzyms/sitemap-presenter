@@ -3,6 +3,7 @@
 	import type { PageData } from '$lib/types';
 	import { sitemapStore } from '$lib/stores/sitemap';
 	import { pageViewerStore } from '$lib/stores/pageViewer';
+	import { projectsStore } from '$lib/stores/projects';
 
 	interface Props {
 		id: string;
@@ -13,10 +14,36 @@
 	let { id, data, selected = false }: Props = $props();
 
 	const zoomLevel = sitemapStore.zoomLevel;
+	const currentProjectId = projectsStore.currentProjectId;
+	const searchQuery = sitemapStore.searchQuery;
+
+	// Check if node matches search query
+	let matchesSearch = $derived.by(() => {
+		if (!$searchQuery) return true;
+		const query = $searchQuery.toLowerCase();
+		return data.url.toLowerCase().includes(query) || data.title.toLowerCase().includes(query);
+	});
 
 	// Level of Detail based on zoom - removed minimal, always show at least thumbnail
 	let lod = $derived($zoomLevel > 0.3 ? 'thumbnail' : 'full');
 	let showIframe = $derived(lod === 'full' && selected);
+
+	// Get feedback count for this page
+	let feedbackCount = $derived.by(() => {
+		if (!$currentProjectId) return 0;
+		const project = projectsStore.getProject($currentProjectId);
+		if (!project?.cachedData?.feedbackMarkers) return 0;
+
+		// Extract path from URL
+		try {
+			const url = new URL(data.url);
+			const pagePath = url.pathname;
+			const markers = project.cachedData.feedbackMarkers[pagePath];
+			return markers?.length || 0;
+		} catch {
+			return 0;
+		}
+	});
 
 	// Status indicator color
 	let statusColor = $derived(
@@ -60,6 +87,9 @@
 	class:ring-2={selected}
 	class:ring-blue-500={selected}
 	class:ring-offset-2={selected}
+	class:opacity-30={$searchQuery && !matchesSearch}
+	class:ring-4={$searchQuery && matchesSearch}
+	class:ring-yellow-400={$searchQuery && matchesSearch}
 	onclick={handleClick}
 >
 	<Handle type="target" position={Position.Top} class="!bg-gray-400" />
@@ -101,6 +131,15 @@
 				>
 					Depth: {data.depth}
 				</div>
+				<!-- Feedback count badge -->
+				{#if feedbackCount > 0}
+					<div class="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-xs rounded-full font-medium">
+						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+						</svg>
+						{feedbackCount}
+					</div>
+				{/if}
 			</div>
 			<div class="p-3 bg-white">
 				<p class="truncate text-base font-medium text-gray-800">{data.title}</p>
@@ -144,6 +183,15 @@
 				<div class="absolute top-2 left-2 px-2 py-1 bg-black/50 text-white text-sm rounded">
 					Depth: {data.depth}
 				</div>
+				<!-- Feedback count badge -->
+				{#if feedbackCount > 0}
+					<div class="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-sm rounded-full font-medium">
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+						</svg>
+						{feedbackCount}
+					</div>
+				{/if}
 				<!-- Links count -->
 				<div class="absolute bottom-2 left-2 flex gap-2">
 					<span class="px-2 py-1 bg-blue-500/80 text-white text-xs rounded">
