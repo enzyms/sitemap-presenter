@@ -1,0 +1,61 @@
+headersOrigin = "config"
+redirectsOrigin = "config"
+plugins = []
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "/Users/sylvainaerni/DEV/sites/sitemap-presenter/apps/web/build"
+publishOrigin = "config"
+commandOrigin = "config"
+base = "/Users/sylvainaerni/DEV/sites/sitemap-presenter/apps/web"
+command = "cd ../.. && pnpm build:widget && cp packages/widget/dist/widget.js apps/web/static/widget/ && cd apps/web && pnpm build"
+
+[build.environment]
+NODE_VERSION = "20"
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[[headers]]
+for = "/_app/immutable/*"
+
+[headers.values]
+cache-control = "public, immutable, max-age=31536000"
+
+[[headers]]
+for = "/widget.js"
+
+[headers.values]
+Access-Control-Allow-Origin = "*"
+Cache-Control = "public, max-age=3600"
+
+[[headers]]
+for = "/widget/*"
+
+[headers.values]
+Access-Control-Allow-Origin = "*"
+Cache-Control = "public, max-age=3600"
+
+[[redirects]]
+from = "/widget.js"
+to = "/widget/widget.js"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]

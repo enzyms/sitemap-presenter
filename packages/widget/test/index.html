@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feedback Widget Test Page</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f5;
+    }
+
+    header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 60px 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0 0 10px 0;
+      font-size: 2.5rem;
+    }
+
+    header p {
+      margin: 0;
+      font-size: 1.1rem;
+      opacity: 0.9;
+    }
+
+    nav {
+      background: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      padding: 15px 20px;
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+    }
+
+    nav a {
+      color: #333;
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    nav a:hover {
+      color: #667eea;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+
+    .hero-section {
+      background: white;
+      border-radius: 12px;
+      padding: 40px;
+      margin-bottom: 30px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+
+    .hero-section h2 {
+      margin-top: 0;
+      color: #333;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      margin-bottom: 30px;
+    }
+
+    .feature-card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+
+    .feature-card h3 {
+      margin-top: 0;
+      color: #333;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .feature-card .icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 20px;
+    }
+
+    .feature-card p {
+      color: #666;
+      margin-bottom: 0;
+    }
+
+    .cta-section {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      color: white;
+    }
+
+    .cta-section h2 {
+      margin-top: 0;
+    }
+
+    .cta-button {
+      display: inline-block;
+      background: white;
+      color: #667eea;
+      padding: 12px 30px;
+      border-radius: 30px;
+      text-decoration: none;
+      font-weight: 600;
+      margin-top: 15px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .cta-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    }
+
+    .form-section {
+      background: white;
+      border-radius: 12px;
+      padding: 40px;
+      margin-bottom: 30px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: #333;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .submit-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .submit-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    footer {
+      background: #333;
+      color: white;
+      padding: 40px 20px;
+      text-align: center;
+    }
+
+    footer p {
+      margin: 0;
+      opacity: 0.8;
+    }
+
+    /* Sidebar for testing */
+    .test-sidebar {
+      position: fixed;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      z-index: 1000;
+      width: 200px;
+    }
+
+    .test-sidebar h4 {
+      margin-top: 0;
+      color: #333;
+    }
+
+    .test-sidebar p {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+
+    .test-sidebar code {
+      display: block;
+      background: #f5f5f5;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Widget Test Page</h1>
+    <p>Try clicking "Feedback" button to add markers on this page</p>
+  </header>
+
+  <nav>
+    <a href="#features">Features</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#about">About</a>
+    <a href="#contact">Contact</a>
+  </nav>
+
+  <main>
+    <section class="hero-section">
+      <h2>Welcome to the Test Page</h2>
+      <p>
+        This page demonstrates the feedback widget functionality. Click the orange "Feedback" button
+        in the bottom-right corner to enter placement mode, then click anywhere on the page to leave
+        a feedback marker.
+      </p>
+      <p>
+        Each marker can have multiple comments, and you can resolve or reopen feedback as needed.
+        The widget syncs in realtime via Supabase.
+      </p>
+    </section>
+
+    <section class="features" id="features">
+      <div class="feature-card">
+        <h3><div class="icon">1</div> Easy Installation</h3>
+        <p>Just add a single script tag to your page. No complex configuration required.</p>
+      </div>
+
+      <div class="feature-card">
+        <h3><div class="icon">2</div> Visual Feedback</h3>
+        <p>Click anywhere on the page to leave a marker. Great for design reviews and bug reports.</p>
+      </div>
+
+      <div class="feature-card">
+        <h3><div class="icon">3</div> Realtime Sync</h3>
+        <p>All feedback syncs instantly across all viewers. Powered by Supabase Realtime.</p>
+      </div>
+
+      <div class="feature-card">
+        <h3><div class="icon">4</div> Element Anchoring</h3>
+        <p>Markers anchor to DOM elements, so they stay in place even when the page changes.</p>
+      </div>
+    </section>
+
+    <section class="form-section" id="contact">
+      <h2>Sample Form</h2>
+      <p>Try adding feedback markers to form elements:</p>
+
+      <form onsubmit="event.preventDefault(); alert('Form submitted!');">
+        <div class="form-group">
+          <label for="name">Name</label>
+          <input type="text" id="name" placeholder="Enter your name">
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="Enter your email">
+        </div>
+
+        <div class="form-group">
+          <label for="plan">Plan</label>
+          <select id="plan">
+            <option>Free</option>
+            <option>Pro</option>
+            <option>Enterprise</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="message">Message</label>
+          <textarea id="message" rows="4" placeholder="Enter your message"></textarea>
+        </div>
+
+        <button type="submit" class="submit-btn">Submit</button>
+      </form>
+    </section>
+
+    <section class="cta-section">
+      <h2>Ready to collect feedback?</h2>
+      <p>Install the widget on your site and start gathering visual feedback today.</p>
+      <a href="#" class="cta-button">Get Started Free</a>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2024 Feedback Widget. All rights reserved.</p>
+  </footer>
+
+  <!-- Test sidebar -->
+  <div class="test-sidebar">
+    <h4>Testing Info</h4>
+    <p>API Key being used:</p>
+    <code>YOUR_SITE_API_KEY</code>
+    <p style="margin-top: 15px; font-size: 11px; color: #999;">
+      Create a site in your Supabase database to get an API key.
+    </p>
+  </div>
+
+  <!-- Feedback Widget (loaded from dist after build) -->
+  <script
+    src="../dist/widget.js"
+    data-api-key="YOUR_SITE_API_KEY"
+    data-position="bottom-right"
+  ></script>
+</body>
+</html>

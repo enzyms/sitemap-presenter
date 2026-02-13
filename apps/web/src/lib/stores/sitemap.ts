@@ -346,6 +346,7 @@ function createSitemapStore() {
 		setSessionId,
 		setStatus,
 		reset,
+		clearAll: reset, // Alias for reset
 		loadFromCache,
 		getCurrentData,
 		refreshNodes,

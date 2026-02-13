@@ -1,0 +1,24 @@
+[build]
+  command = "pnpm build:widget && cp packages/widget/dist/widget.js apps/web/static/widget/ && cd apps/web && pnpm build"
+  publish = "apps/web/build"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Serve the widget.js from /widget.js
+[[redirects]]
+  from = "/widget.js"
+  to = "/widget/widget.js"
+  status = 200
+
+[[headers]]
+  for = "/widget.js"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/widget/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Cache-Control = "public, max-age=3600"

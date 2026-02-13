@@ -8,6 +8,7 @@
 	import PageViewer from '$lib/components/viewer/PageViewer.svelte';
 	import { sitemapStore } from '$lib/stores/sitemap';
 	import { projectsStore } from '$lib/stores/projects';
+	import { configStore } from '$lib/stores/config';
 	import { onMount } from 'svelte';
 
 	const CONFIG_PANEL_KEY = 'sitemap-presenter-config-panel';
@@ -73,13 +74,17 @@
 	function handleCreateProject() {
 		if (!newProjectName.trim() || !newProjectBaseUrl.trim()) return;
 
+		const baseUrl = newProjectBaseUrl.trim();
 		const project = projectsStore.createProject(
 			newProjectName.trim(),
 			newProjectDescription.trim(),
-			newProjectBaseUrl.trim()
+			baseUrl
 		);
 		projectsStore.selectProject(project.id);
 		sitemapStore.clearAll();
+
+		// Sync the project's baseUrl to the config store so the crawl form has it pre-filled
+		configStore.setUrl(baseUrl);
 
 		// Reset form
 		newProjectName = '';
@@ -104,6 +109,12 @@
 		// Load cached data for restored project after a tick
 		setTimeout(() => {
 			if ($currentProjectId && $nodes.length === 0) {
+				// Sync the project's baseUrl to the config store
+				const project = projectsStore.getProject($currentProjectId);
+				if (project?.baseUrl) {
+					configStore.setUrl(project.baseUrl);
+				}
+
 				const cachedData = projectsStore.getCachedData($currentProjectId);
 				if (cachedData) {
 					// Augment nodes with feedback stats before loading
@@ -190,8 +201,17 @@
 			<div class="flex-1"></div>
 		{/if}
 
-		<!-- Right: New project button + Dropdown -->
+		<!-- Right: Sites link + New project button + Dropdown -->
 		<div class="flex items-center gap-3 flex-1 justify-end">
+			<a
+				href="/sites"
+				class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium"
+			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+				</svg>
+				Sites
+			</a>
 			<button
 				onclick={() => (showNewProjectModal = true)}
 				class="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
