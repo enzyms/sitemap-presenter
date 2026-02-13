@@ -7,9 +7,10 @@
 
 	interface Props {
 		onClose?: () => void;
+		siteId?: string;
 	}
 
-	let { onClose }: Props = $props();
+	let { onClose, siteId }: Props = $props();
 
 	const config = configStore;
 	const progress = sitemapStore.progress;
@@ -52,7 +53,7 @@
 			const response = await apiService.startCrawl($config);
 			sitemapStore.setSessionId(response.sessionId);
 			sitemapStore.setStatus('crawling');
-			socketService.connect(response.sessionId);
+			socketService.connect(response.sessionId, siteId);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to start crawl';
 			sitemapStore.setStatus('error');

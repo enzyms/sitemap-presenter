@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import AppHeader from '$lib/components/ui/AppHeader.svelte';
 	import { getSupabase, type Site } from '$lib/services/supabase';
+	import { screenshotCache } from '$lib/services/screenshotCache';
 
 	let siteId = $derived($page.params.id);
 
@@ -85,17 +86,30 @@
 			const supabase = getSupabase();
 
 			// Delete site (cascade should handle markers and comments)
-			const { error: deleteError } = await supabase
+			const { data: deletedRows, error: deleteError } = await supabase
 				.from('sites')
 				.delete()
-				.eq('id', siteId);
+				.eq('id', siteId)
+				.select();
 
 			if (deleteError) throw deleteError;
+
+			// Check if any rows were actually deleted
+			if (!deletedRows || deletedRows.length === 0) {
+				throw new Error('Site not found or you do not have permission to delete it');
+			}
 
 			// Clear localStorage cache
 			try {
 				localStorage.removeItem(`sitemap-cache-${siteId}`);
 			} catch {}
+
+			// Clear IndexedDB screenshot cache
+			try {
+				await screenshotCache.deleteBySiteId(siteId);
+			} catch (e) {
+				console.error('Failed to clear screenshot cache:', e);
+			}
 
 			// Redirect to homepage
 			goto('/');

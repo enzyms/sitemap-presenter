@@ -11,6 +11,7 @@
 	import { configStore } from '$lib/stores/config';
 	import { feedbackStore } from '$lib/stores/feedback';
 	import { getSupabase, type Site } from '$lib/services/supabase';
+	import { screenshotCache } from '$lib/services/screenshotCache';
 	import type { PageNode, FeedbackStats } from '$lib/types';
 
 	const CONFIG_PANEL_KEY = 'sitemap-presenter-config-panel';
@@ -63,21 +64,53 @@
 	}
 
 	// Load cached sitemap from localStorage
-	function loadCachedSitemap() {
+	async function loadCachedSitemap() {
 		try {
 			const cached = localStorage.getItem(`${SITEMAP_CACHE_PREFIX}${siteId}`);
 			if (cached) {
 				const data = JSON.parse(cached);
 				if (data.nodes && data.edges) {
 					// Augment nodes with Supabase marker counts
-					loadSupabaseMarkerCounts(data.nodes).then(nodesWithFeedback => {
-						sitemapStore.loadFromCache(nodesWithFeedback, data.edges);
-					});
+					let nodesWithFeedback = await loadSupabaseMarkerCounts(data.nodes);
+
+					// Restore screenshots from IndexedDB cache
+					nodesWithFeedback = await restoreScreenshotsFromCache(nodesWithFeedback);
+
+					sitemapStore.loadFromCache(nodesWithFeedback, data.edges);
 				}
 			}
 		} catch (e) {
 			console.error('Failed to load cached sitemap:', e);
 		}
+	}
+
+	// Restore screenshot URLs from IndexedDB cache
+	async function restoreScreenshotsFromCache(nodes: PageNode[]): Promise<PageNode[]> {
+		const updatedNodes: PageNode[] = [];
+
+		for (const node of nodes) {
+			try {
+				const cachedUrls = await screenshotCache.getObjectUrl(siteId, node.data.url);
+				if (cachedUrls) {
+					updatedNodes.push({
+						...node,
+						data: {
+							...node.data,
+							thumbnailUrl: cachedUrls.thumbnailObjectUrl,
+							fullScreenshotUrl: cachedUrls.fullPageObjectUrl,
+							screenshotStatus: 'ready' as const
+						}
+					});
+				} else {
+					updatedNodes.push(node);
+				}
+			} catch (e) {
+				console.error('Failed to restore screenshot for', node.data.url, e);
+				updatedNodes.push(node);
+			}
+		}
+
+		return updatedNodes;
 	}
 
 	// Save sitemap to localStorage
@@ -178,6 +211,15 @@
 			console.error('Failed to load config panel state:', e);
 		}
 
+		// Initialize screenshot cache and clear old entries
+		screenshotCache.init().then(() => {
+			screenshotCache.clearOldCache(7).then((deleted) => {
+				if (deleted > 0) {
+					console.log(`Cleared ${deleted} old cached screenshots`);
+				}
+			});
+		});
+
 		loadSite();
 
 		return () => {
@@ -250,7 +292,7 @@
 			<div class="absolute top-4 left-4 z-10 space-y-4">
 				{#if showConfig}
 					<div class="transform transition-all duration-300 ease-out origin-top">
-						<ConfigPanel onClose={toggleConfig} />
+						<ConfigPanel onClose={toggleConfig} siteId={siteId} />
 					</div>
 				{:else}
 					<button

@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import { sitemapStore } from '$lib/stores/sitemap';
 import { projectsStore } from '$lib/stores/projects';
+import { screenshotCache } from '$lib/services/screenshotCache';
 import { get } from 'svelte/store';
 import type {
 	PageDiscoveredEvent,
@@ -13,8 +14,10 @@ import type {
 class SocketService {
 	private socket: Socket | null = null;
 	private sessionId: string | null = null;
+	private currentSiteId: string | null = null;
 
-	connect(sessionId: string): void {
+	connect(sessionId: string, siteId?: string): void {
+		this.currentSiteId = siteId || null;
 		if (this.socket?.connected) {
 			this.disconnect();
 		}
@@ -41,9 +44,24 @@ class SocketService {
 			sitemapStore.layoutNodes();
 		});
 
-		this.socket.on('page:screenshot', (data: PageScreenshotEvent) => {
+		this.socket.on('page:screenshot', async (data: PageScreenshotEvent) => {
 			console.log('Screenshot ready:', data.url);
 			sitemapStore.updateScreenshot(data);
+
+			// Cache screenshots to IndexedDB for offline use
+			if (this.currentSiteId && data.thumbnailUrl) {
+				try {
+					await screenshotCache.fetchAndCache(
+						data.url,
+						this.currentSiteId,
+						data.thumbnailUrl,
+						data.fullScreenshotUrl
+					);
+					console.log('Screenshot cached:', data.url);
+				} catch (error) {
+					console.error('Failed to cache screenshot:', error);
+				}
+			}
 		});
 
 		this.socket.on('crawl:progress', (data: CrawlProgressEvent) => {

@@ -80,9 +80,17 @@ export const widgetStyles = `
   .position-top-right { top: 24px; right: 24px; }
   .position-top-left { top: 24px; left: 24px; }
 
+  /* Marker bubble - custom element */
+  feedback-marker-bubble {
+    position: absolute;
+    display: block;
+    pointer-events: auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+
   /* Marker bubbles on the page */
   .marker-bubble {
-    position: absolute;
+    position: relative;
     z-index: 999997;
     width: 28px;
     height: 28px;
@@ -138,10 +146,19 @@ export const widgetStyles = `
     height: 16px;
   }
 
-  /* Comments panel */
-  .comments-panel {
+  /* Comments panel - custom element */
+  feedback-comments-panel {
     position: fixed;
     z-index: 999999;
+    display: block;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--gray-800);
+  }
+
+  /* Comments panel - inner container */
+  .comments-panel {
     width: 320px;
     max-height: 400px;
     background: white;

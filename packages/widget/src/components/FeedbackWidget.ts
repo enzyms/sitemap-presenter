@@ -13,6 +13,21 @@ import { widgetStyles } from '../styles/widget.css';
 import { MarkerBubble } from './MarkerBubble';
 import { CommentsPanel, CommentsPanelEvents } from './CommentsPanel';
 
+// Types for parent communication (matching sitemap-presenter app)
+interface FeedbackMarkerForParent {
+  id: string;
+  pageUrl: string;
+  pagePath: string;
+  number: number;
+  anchor: ElementAnchor;
+  fallbackPosition: { xPercent: number; yPercent: number };
+  viewport: ViewportInfo;
+  status: MarkerStatus;
+  comments: { id: string; author: string; content: string; createdAt: string }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class FeedbackWidget extends HTMLElement {
   private shadow: ShadowRoot;
   private api: FeedbackAPI | null = null;
@@ -24,6 +39,10 @@ export class FeedbackWidget extends HTMLElement {
   private isPlacementMode = false;
   private hoveredElement: Element | null = null;
   private activeMarkerId: string | null = null;
+
+  // Parent communication (for iframe embedding in sitemap-presenter)
+  private isInIframe = false;
+  private parentOrigin: string | null = null;
 
   // DOM references
   private container: HTMLDivElement | null = null;
@@ -37,6 +56,14 @@ export class FeedbackWidget extends HTMLElement {
   constructor() {
     super();
     this.shadow = this.attachShadow({ mode: 'open' });
+
+    // Detect if running in iframe
+    this.isInIframe = window !== window.parent;
+
+    // Listen for parent messages
+    if (this.isInIframe) {
+      window.addEventListener('message', this.handleParentMessage.bind(this));
+    }
   }
 
   async connectedCallback() {
@@ -110,6 +137,33 @@ export class FeedbackWidget extends HTMLElement {
     // Update marker positions on scroll/resize
     window.addEventListener('scroll', this.handleScroll.bind(this), { passive: true });
     window.addEventListener('resize', this.handleResize.bind(this), { passive: true });
+
+    // Listen for navigation changes (SPA)
+    if (this.isInIframe) {
+      window.addEventListener('popstate', this.handleNavigation.bind(this));
+      // Intercept pushState/replaceState for SPA navigation
+      this.interceptHistoryMethods();
+    }
+  }
+
+  private handleNavigation = async () => {
+    // Reload markers for new page
+    await this.loadMarkers();
+  };
+
+  private interceptHistoryMethods() {
+    const originalPushState = history.pushState.bind(history);
+    const originalReplaceState = history.replaceState.bind(history);
+
+    history.pushState = (...args) => {
+      originalPushState(...args);
+      setTimeout(() => this.handleNavigation(), 0);
+    };
+
+    history.replaceState = (...args) => {
+      originalReplaceState(...args);
+      setTimeout(() => this.handleNavigation(), 0);
+    };
   }
 
   private createFloatingButton() {
@@ -139,6 +193,11 @@ export class FeedbackWidget extends HTMLElement {
 
   private createPlacementElements() {
     if (!this.container) return;
+
+    // IMPORTANT: Inject styles to document head immediately
+    // This ensures styles work for elements outside shadow DOM
+    // (highlightOverlay, markersContainer, marker bubbles, comments panel)
+    this.injectPanelStyles();
 
     // Placement cursor (follows mouse)
     this.placementCursor = document.createElement('div');
@@ -174,6 +233,11 @@ export class FeedbackWidget extends HTMLElement {
       this.markers = await this.api.getMarkers(pagePath);
       this.renderMarkers();
       this.updateButtonCount();
+
+      // Notify parent if in iframe
+      if (this.isInIframe) {
+        this.notifyParentOfNavigation();
+      }
     } catch (error) {
       console.error('[FeedbackWidget] Failed to load markers:', error);
     }
@@ -226,9 +290,15 @@ export class FeedbackWidget extends HTMLElement {
         if (eventType === 'INSERT') {
           // Check if marker already exists (might have been added locally)
           if (!this.markers.find(m => m.id === marker.id)) {
-            this.markers = [...this.markers, { ...marker, comments: [] }];
+            const newMarker = { ...marker, comments: [] } as MarkerWithComments;
+            this.markers = [...this.markers, newMarker];
             this.renderMarkers();
             this.updateButtonCount();
+
+            // Notify parent
+            if (this.isInIframe) {
+              this.notifyParentOfMarkerCreated(newMarker);
+            }
           }
         } else if (eventType === 'UPDATE') {
           this.markers = this.markers.map(m =>
@@ -241,6 +311,14 @@ export class FeedbackWidget extends HTMLElement {
           if (this.commentsPanel && this.activeMarkerId === marker.id) {
             this.commentsPanel.updateStatus(marker.status);
           }
+
+          // Notify parent
+          if (this.isInIframe) {
+            const updatedMarker = this.markers.find(m => m.id === marker.id);
+            if (updatedMarker) {
+              this.notifyParentOfMarkerUpdated(updatedMarker);
+            }
+          }
         } else if (eventType === 'DELETE') {
           this.markers = this.markers.filter(m => m.id !== marker.id);
           this.renderMarkers();
@@ -249,6 +327,11 @@ export class FeedbackWidget extends HTMLElement {
           // Close comments panel if it was showing this marker
           if (this.activeMarkerId === marker.id) {
             this.closeCommentsPanel();
+          }
+
+          // Notify parent
+          if (this.isInIframe) {
+            this.notifyParentOfMarkerDeleted(marker.id);
           }
         }
       },
@@ -273,6 +356,14 @@ export class FeedbackWidget extends HTMLElement {
             const marker = this.markers.find(m => m.id === comment.marker_id);
             if (marker) {
               this.commentsPanel.updateComments(marker.comments);
+            }
+          }
+
+          // Notify parent
+          if (this.isInIframe) {
+            const updatedMarker = this.markers.find(m => m.id === comment.marker_id);
+            if (updatedMarker) {
+              this.notifyParentOfMarkerUpdated(updatedMarker);
             }
           }
         }
@@ -474,6 +565,11 @@ export class FeedbackWidget extends HTMLElement {
       this.renderMarkers();
       this.updateButtonCount();
 
+      // Notify parent if in iframe
+      if (this.isInIframe) {
+        this.notifyParentOfMarkerCreated(marker);
+      }
+
       // Open comments panel for the new marker
       this.openCommentsPanel(marker);
     } catch (error) {
@@ -669,9 +765,41 @@ export class FeedbackWidget extends HTMLElement {
     // Check if styles already injected
     if (document.getElementById('feedback-widget-styles')) return;
 
+    // Define CSS variables at :root level so they work outside shadow DOM
+    // Use the same variable names as in the CSS so no replacement is needed
+    const rootVariables = `
+      :root {
+        --primary-color: ${this.config?.primaryColor || '#f97316'};
+        --primary-hover: #ea580c;
+        --primary-light: #fff7ed;
+        --success-color: #22c55e;
+        --success-light: #f0fdf4;
+        --gray-50: #f9fafb;
+        --gray-100: #f3f4f6;
+        --gray-200: #e5e7eb;
+        --gray-300: #d1d5db;
+        --gray-400: #9ca3af;
+        --gray-500: #6b7280;
+        --gray-600: #4b5563;
+        --gray-700: #374151;
+        --gray-800: #1f2937;
+        --gray-900: #111827;
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+      }
+    `;
+
+    // Remove the :host block since we define variables at :root
+    // The :host block only works in shadow DOM, not in document head
+    const documentStyles = widgetStyles
+      .replace(/:host\s*\{[^}]*\}/g, ''); // Remove the entire :host block
+
     const style = document.createElement('style');
     style.id = 'feedback-widget-styles';
-    style.textContent = widgetStyles;
+    style.textContent = rootVariables + documentStyles;
     document.head.appendChild(style);
   }
 
@@ -719,8 +847,235 @@ export class FeedbackWidget extends HTMLElement {
 
     window.removeEventListener('scroll', this.handleScroll.bind(this));
     window.removeEventListener('resize', this.handleResize.bind(this));
+    window.removeEventListener('message', this.handleParentMessage.bind(this));
 
     this.exitPlacementMode();
+  }
+
+  // ============================================================
+  // Parent Communication (iframe mode)
+  // ============================================================
+
+  private convertMarkerForParent(marker: MarkerWithComments): FeedbackMarkerForParent {
+    return {
+      id: marker.id,
+      pageUrl: marker.page_url,
+      pagePath: marker.page_path,
+      number: marker.number,
+      anchor: marker.anchor,
+      fallbackPosition: marker.fallback_position,
+      viewport: marker.viewport,
+      status: marker.status,
+      comments: marker.comments.map(c => ({
+        id: c.id,
+        author: c.author_name || 'Anonymous',
+        content: c.content,
+        createdAt: c.created_at
+      })),
+      createdAt: marker.created_at,
+      updatedAt: marker.updated_at
+    };
+  }
+
+  private sendToParent(message: unknown) {
+    if (!this.isInIframe || !window.parent) return;
+    try {
+      window.parent.postMessage(message, '*');
+    } catch (e) {
+      console.error('[FeedbackWidget] Failed to send message to parent:', e);
+    }
+  }
+
+  private notifyParentOfNavigation() {
+    const markersForParent = this.markers.map(m => this.convertMarkerForParent(m));
+    this.sendToParent({
+      type: 'FEEDBACK_NAVIGATION',
+      url: window.location.href,
+      pathname: window.location.pathname,
+      title: document.title,
+      markers: markersForParent
+    });
+  }
+
+  private notifyParentOfMarkerCreated(marker: MarkerWithComments) {
+    this.sendToParent({
+      type: 'FEEDBACK_MARKER_CREATED',
+      marker: this.convertMarkerForParent(marker)
+    });
+  }
+
+  private notifyParentOfMarkerUpdated(marker: MarkerWithComments) {
+    this.sendToParent({
+      type: 'FEEDBACK_MARKER_UPDATED',
+      marker: this.convertMarkerForParent(marker)
+    });
+  }
+
+  private notifyParentOfMarkerDeleted(markerId: string) {
+    this.sendToParent({
+      type: 'FEEDBACK_MARKER_DELETED',
+      markerId
+    });
+  }
+
+  private handleParentMessage(event: MessageEvent) {
+    const data = event.data;
+    if (!data?.type?.startsWith('FEEDBACK_')) return;
+
+    // Store parent origin for responses
+    this.parentOrigin = event.origin;
+
+    console.log('[FeedbackWidget] Received message from parent:', data.type);
+
+    switch (data.type) {
+      case 'FEEDBACK_GET_MARKERS':
+        this.handleGetMarkersRequest();
+        break;
+      case 'FEEDBACK_UPDATE_STATUS':
+        this.handleUpdateStatusRequest(data.markerId, data.status);
+        break;
+      case 'FEEDBACK_ADD_COMMENT':
+        this.handleAddCommentRequest(data.markerId, data.content, data.author);
+        break;
+      case 'FEEDBACK_DELETE_MARKER':
+        this.handleDeleteMarkerRequest(data.markerId);
+        break;
+      case 'FEEDBACK_HIGHLIGHT_MARKER':
+        this.handleHighlightMarkerRequest(data.markerId);
+        break;
+    }
+  }
+
+  private handleGetMarkersRequest() {
+    const markersForParent = this.markers.map(m => this.convertMarkerForParent(m));
+    this.sendToParent({
+      type: 'FEEDBACK_MARKERS_RESPONSE',
+      markers: markersForParent
+    });
+  }
+
+  private async handleUpdateStatusRequest(markerId: string, status: MarkerStatus) {
+    if (!this.api) return;
+    try {
+      await this.api.updateMarker(markerId, { status });
+      this.markers = this.markers.map(m => m.id === markerId ? { ...m, status } : m);
+      this.renderMarkers();
+      this.updateButtonCount();
+
+      const updatedMarker = this.markers.find(m => m.id === markerId);
+      if (updatedMarker) {
+        this.notifyParentOfMarkerUpdated(updatedMarker);
+      }
+
+      this.sendToParent({
+        type: 'FEEDBACK_ACTION_CONFIRMED',
+        action: 'status_updated',
+        markerId,
+        success: true
+      });
+    } catch (error) {
+      console.error('[FeedbackWidget] Failed to update status:', error);
+      this.sendToParent({
+        type: 'FEEDBACK_ACTION_CONFIRMED',
+        action: 'status_updated',
+        markerId,
+        success: false
+      });
+    }
+  }
+
+  private async handleAddCommentRequest(markerId: string, content: string, author?: string) {
+    if (!this.api) return;
+    try {
+      const comment = await this.api.createComment({
+        marker_id: markerId,
+        content,
+        author_name: author
+      });
+
+      this.markers = this.markers.map(m => {
+        if (m.id === markerId) {
+          return { ...m, comments: [...m.comments, comment] };
+        }
+        return m;
+      });
+
+      const updatedMarker = this.markers.find(m => m.id === markerId);
+      if (updatedMarker) {
+        this.notifyParentOfMarkerUpdated(updatedMarker);
+        if (this.commentsPanel && this.activeMarkerId === markerId) {
+          this.commentsPanel.updateComments(updatedMarker.comments);
+        }
+      }
+
+      this.sendToParent({
+        type: 'FEEDBACK_ACTION_CONFIRMED',
+        action: 'comment_added',
+        markerId,
+        success: true
+      });
+    } catch (error) {
+      console.error('[FeedbackWidget] Failed to add comment:', error);
+      this.sendToParent({
+        type: 'FEEDBACK_ACTION_CONFIRMED',
+        action: 'comment_added',
+        markerId,
+        success: false
+      });
+    }
+  }
+
+  private async handleDeleteMarkerRequest(markerId: string) {
+    if (!this.api) return;
+    try {
+      await this.api.deleteMarker(markerId);
+      this.markers = this.markers.filter(m => m.id !== markerId);
+      this.renderMarkers();
+      this.updateButtonCount();
+
+      if (this.activeMarkerId === markerId) {
+        this.closeCommentsPanel();
+      }
+
+      this.notifyParentOfMarkerDeleted(markerId);
+
+      this.sendToParent({
+        type: 'FEEDBACK_ACTION_CONFIRMED',
+        action: 'marker_deleted',
+        markerId,
+        success: true
+      });
+    } catch (error) {
+      console.error('[FeedbackWidget] Failed to delete marker:', error);
+      this.sendToParent({
+        type: 'FEEDBACK_ACTION_CONFIRMED',
+        action: 'marker_deleted',
+        markerId,
+        success: false
+      });
+    }
+  }
+
+  private handleHighlightMarkerRequest(markerId: string | null) {
+    // Remove highlight from all markers
+    if (this.markersContainer) {
+      const bubbles = this.markersContainer.querySelectorAll('feedback-marker-bubble') as NodeListOf<MarkerBubble>;
+      bubbles.forEach(bubble => bubble.setHighlighted(false));
+    }
+
+    // Highlight the specified marker
+    if (markerId && this.markersContainer) {
+      const marker = this.markers.find(m => m.id === markerId);
+      if (marker) {
+        // Open comments panel for the marker
+        const markerWithComments = this.markers.find(m => m.id === markerId);
+        if (markerWithComments) {
+          this.openCommentsPanel(markerWithComments);
+        }
+      }
+    } else {
+      this.closeCommentsPanel();
+    }
   }
 }
 

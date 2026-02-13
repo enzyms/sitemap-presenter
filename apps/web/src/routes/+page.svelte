@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import AppHeader from '$lib/components/ui/AppHeader.svelte';
 	import { getSupabase, type SiteWithStats } from '$lib/services/supabase';
+	import { screenshotCache } from '$lib/services/screenshotCache';
 
 	let sites = $state<SiteWithStats[]>([]);
 	let loading = $state(true);
@@ -30,12 +31,18 @@
 
 		try {
 			const supabase = getSupabase();
-			const { error: deleteError } = await supabase
+			const { data: deletedRows, error: deleteError } = await supabase
 				.from('sites')
 				.delete()
-				.eq('id', site.id);
+				.eq('id', site.id)
+				.select();
 
 			if (deleteError) throw deleteError;
+
+			// Check if any rows were actually deleted
+			if (!deletedRows || deletedRows.length === 0) {
+				throw new Error('Site not found or you do not have permission to delete it');
+			}
 
 			// Remove from local state
 			sites = sites.filter(s => s.id !== site.id);
@@ -44,6 +51,13 @@
 			try {
 				localStorage.removeItem(`sitemap-cache-${site.id}`);
 			} catch {}
+
+			// Clear IndexedDB screenshot cache
+			try {
+				await screenshotCache.deleteBySiteId(site.id);
+			} catch (e) {
+				console.error('Failed to clear screenshot cache:', e);
+			}
 		} catch (e) {
 			console.error('Failed to delete site:', e);
 			alert('Failed to delete site');
