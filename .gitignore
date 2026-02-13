@@ -33,3 +33,6 @@ apps/server/screenshots/*
 
 # Redis
 dump.rdb
+
+# Local Netlify folder
+.netlify

@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
 	import { pageViewerStore } from '$lib/stores/pageViewer';
 	import { sitemapStore } from '$lib/stores/sitemap';
 	import { projectsStore } from '$lib/stores/projects';
+	import { feedbackStore } from '$lib/stores/feedback';
 	import FeedbackSidebar from './FeedbackSidebar.svelte';
 	import type {
 		FeedbackMarker,
@@ -19,16 +20,42 @@
 	const pageTitle = pageViewerStore.pageTitle;
 	const screenshotUrl = pageViewerStore.screenshotUrl;
 
+	// Supabase feedback
+	const supabaseMarkers = feedbackStore.markersForCurrentPage;
+	const feedbackLoading = feedbackStore.loading;
+
 	let iframeLoaded = $state(false);
 	let iframeError = $state(false);
 	let useScreenshot = $state(false);
 	let loadTimeout: ReturnType<typeof setTimeout>;
 
-	// Feedback markers from iframe
+	// Feedback markers - now from Supabase via feedbackStore
 	let iframeRef = $state<HTMLIFrameElement | null>(null);
-	let feedbackMarkers = $state<FeedbackMarker[]>([]);
 	let highlightedMarkerId = $state<string | null>(null);
 	let showFeedbackSidebar = $state(true);
+	let feedbackInitialized = $state(false);
+
+	// Convert Supabase markers to local format for FeedbackSidebar
+	let feedbackMarkers = $derived.by(() => {
+		return $supabaseMarkers.map(m => ({
+			id: m.id,
+			pageUrl: m.page_url,
+			pagePath: m.page_path,
+			number: m.number,
+			anchor: m.anchor,
+			fallbackPosition: m.fallback_position,
+			viewport: m.viewport,
+			status: m.status,
+			comments: m.comments.map(c => ({
+				id: c.id,
+				author: c.author_name || 'Anonymous',
+				content: c.content,
+				createdAt: c.created_at
+			})),
+			createdAt: m.created_at,
+			updatedAt: m.updated_at
+		} as FeedbackMarker));
+	});
 
 	// Send message to iframe
 	function sendToIframe(message: SitemapToIframeMessage): void {
@@ -91,8 +118,8 @@
 		iframeLoaded = false;
 		iframeError = false;
 		useScreenshot = false;
-		feedbackMarkers = [];
 		highlightedMarkerId = null;
+		feedbackInitialized = false;
 		if (loadTimeout) clearTimeout(loadTimeout);
 	}
 
@@ -212,12 +239,20 @@
 			}
 		}
 
-		// Update markers directly from the navigation message (spread to ensure new reference)
-		feedbackMarkers = markers ? [...markers] : [];
 		highlightedMarkerId = null;
 
-		// Save markers to project cache for display on nodes
-		saveMarkersToCache(feedbackMarkers);
+		// Update feedbackStore to filter for the new page
+		try {
+			const url = new URL(newUrl);
+			feedbackStore.setCurrentPage(url.pathname);
+		} catch {
+			// Invalid URL
+		}
+
+		// Still save iframe markers to project cache for display on nodes (backward compat)
+		if (markers && markers.length > 0) {
+			saveMarkersToCache(markers);
+		}
 	}
 
 	// Sidebar callbacks
@@ -232,15 +267,24 @@
 		highlightMarker(marker.id);
 	}
 
-	function handleMarkerStatusChange(markerId: string, status: MarkerStatus) {
+	async function handleMarkerStatusChange(markerId: string, status: MarkerStatus) {
+		// Update in Supabase via feedbackStore
+		await feedbackStore.updateMarkerStatus(markerId, status);
+		// Also send to iframe for visual update
 		updateMarkerStatus(markerId, status);
 	}
 
-	function handleMarkerDelete(markerId: string) {
+	async function handleMarkerDelete(markerId: string) {
+		// Delete from Supabase via feedbackStore
+		await feedbackStore.deleteMarker(markerId);
+		// Also send to iframe for visual update
 		deleteMarker(markerId);
 	}
 
-	function handleMarkerComment(markerId: string, content: string) {
+	async function handleMarkerComment(markerId: string, content: string) {
+		// Add to Supabase via feedbackStore
+		await feedbackStore.addComment(markerId, content);
+		// Also send to iframe for visual update
 		addMarkerComment(markerId, content);
 	}
 
@@ -249,17 +293,46 @@
 		if ($isOpen && !useScreenshot) {
 			iframeLoaded = false;
 			iframeError = false;
-			feedbackMarkers = [];
 			loadTimeout = setTimeout(() => {
 				if (!iframeLoaded) {
 					iframeError = true;
 					iframeLoaded = true;
 				}
 			}, 8000);
+
+			// Initialize feedbackStore with current project's site
+			if (!feedbackInitialized && $currentProjectId) {
+				const project = projectsStore.getProject($currentProjectId);
+				if (project?.siteId) {
+					feedbackStore.initializeBySiteId(project.siteId).then(success => {
+						if (success && $pageUrl) {
+							try {
+								const url = new URL($pageUrl);
+								feedbackStore.setCurrentPage(url.pathname);
+							} catch {
+								// Invalid URL
+							}
+						}
+						feedbackInitialized = true;
+					});
+				}
+			}
 		}
 		return () => {
 			if (loadTimeout) clearTimeout(loadTimeout);
 		};
+	});
+
+	// Update feedbackStore page filter when pageUrl changes
+	$effect(() => {
+		if ($pageUrl && feedbackInitialized) {
+			try {
+				const url = new URL($pageUrl);
+				feedbackStore.setCurrentPage(url.pathname);
+			} catch {
+				// Invalid URL
+			}
+		}
 	});
 
 	// Listen for postMessage responses

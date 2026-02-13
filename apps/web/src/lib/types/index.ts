@@ -99,6 +99,10 @@ export interface Project {
 	updatedAt: string;
 	lastCrawledAt?: string;
 	cachedData?: ProjectCachedData;
+	/** Supabase site ID - links to feedback system */
+	siteId?: string;
+	/** Supabase site API key - for widget embedding */
+	siteApiKey?: string;
 }
 
 export interface ProjectCachedData {

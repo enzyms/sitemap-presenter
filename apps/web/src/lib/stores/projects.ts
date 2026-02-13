@@ -1,5 +1,6 @@
 import { writable, get } from 'svelte/store';
 import type { Project, ProjectCachedData, PageNode, LinkEdge, FeedbackMarker } from '$lib/types';
+import { getSupabase } from '$lib/services/supabase';
 
 const STORAGE_KEY = 'sitemap-presenter-projects';
 const CURRENT_PROJECT_KEY = 'sitemap-presenter-current-project';
@@ -105,6 +106,104 @@ function createProjectsStore() {
 		});
 
 		return project;
+	}
+
+	/** Create a project with an associated Supabase site for feedback widget */
+	async function createProjectWithSite(name: string, description: string, baseUrl: string): Promise<Project> {
+		const now = new Date().toISOString();
+		const projectId = generateId();
+
+		// Extract domain from baseUrl
+		let domain = '';
+		try {
+			const url = new URL(baseUrl);
+			domain = url.hostname;
+		} catch {
+			domain = baseUrl.replace(/^https?:\/\//, '').split('/')[0];
+		}
+
+		// Create Supabase site first
+		let siteId: string | undefined;
+		let siteApiKey: string | undefined;
+		try {
+			const supabase = getSupabase();
+			const { data: site, error } = await supabase
+				.from('sites')
+				.insert({
+					name,
+					domain,
+					settings: {}
+				})
+				.select('id, api_key')
+				.single();
+
+			if (error) {
+				console.error('Failed to create Supabase site:', error);
+			} else if (site) {
+				siteId = site.id;
+				siteApiKey = site.api_key;
+				console.log(`[ProjectsStore] Created Supabase site: ${siteId}`);
+			}
+		} catch (e) {
+			console.error('Failed to create Supabase site:', e);
+		}
+
+		const project: Project = {
+			id: projectId,
+			name,
+			description,
+			baseUrl,
+			createdAt: now,
+			updatedAt: now,
+			siteId,
+			siteApiKey
+		};
+
+		projects.update(current => {
+			const updated = [...current, project];
+			saveToStorage(updated);
+			return updated;
+		});
+
+		return project;
+	}
+
+	/** Link an existing project to a Supabase site */
+	async function linkProjectToSite(projectId: string, siteId: string): Promise<boolean> {
+		try {
+			const supabase = getSupabase();
+			const { data: site, error } = await supabase
+				.from('sites')
+				.select('id, api_key')
+				.eq('id', siteId)
+				.single();
+
+			if (error || !site) {
+				console.error('Failed to fetch site:', error);
+				return false;
+			}
+
+			projects.update(current => {
+				const updated = current.map(p => {
+					if (p.id === projectId) {
+						return {
+							...p,
+							siteId: site.id,
+							siteApiKey: site.api_key,
+							updatedAt: new Date().toISOString()
+						};
+					}
+					return p;
+				});
+				saveToStorage(updated);
+				return updated;
+			});
+
+			return true;
+		} catch (e) {
+			console.error('Failed to link project to site:', e);
+			return false;
+		}
 	}
 
 	function updateProject(id: string, updates: Partial<Pick<Project, 'name' | 'description' | 'baseUrl'>>): void {
@@ -232,6 +331,8 @@ function createProjectsStore() {
 		isLoaded,
 		initialize,
 		createProject,
+		createProjectWithSite,
+		linkProjectToSite,
 		updateProject,
 		deleteProject,
 		cacheProjectData,

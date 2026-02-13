@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
+	import AppHeader from '$lib/components/ui/AppHeader.svelte';
 	import { feedbackStore } from '$lib/stores/feedback';
 	import type { MarkerWithComments, MarkerStatus } from '$lib/services/supabase';
+
+	let siteId = $derived($page.params.id);
 
 	const site = feedbackStore.site;
 	const markers = feedbackStore.markers;
@@ -84,54 +87,34 @@
 	<title>{$site?.name || 'Loading...'} - Feedback</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-100">
-	<!-- Header -->
-	<header class="bg-white border-b border-gray-200 px-6 py-4">
-		<div class="max-w-6xl mx-auto">
-			<div class="flex items-center gap-4 mb-4">
-				<a href="/sites" class="text-gray-500 hover:text-gray-700">
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M10 19l-7-7m0 0l7-7m-7 7h18"
-						/>
-					</svg>
-				</a>
-				{#if $site}
-					<div>
-						<h1 class="text-xl font-bold text-gray-800">{$site.name}</h1>
-						<p class="text-sm text-gray-500">{$site.domain}</p>
-					</div>
-				{:else}
-					<div class="h-8 w-48 bg-gray-200 animate-pulse rounded"></div>
-				{/if}
-			</div>
+<div class="min-h-screen bg-gray-100 flex flex-col">
+	<AppHeader siteName={$site?.name} {siteId} showNewSite={false} />
 
-			<!-- Stats -->
-			{#if !$loading}
-				<div class="flex items-center gap-6">
-					<div class="flex items-center gap-2">
-						<span class="text-2xl font-bold text-gray-800">{$markers.length}</span>
-						<span class="text-gray-500">total</span>
-					</div>
-					{#if $openCount > 0}
-						<div class="flex items-center gap-2">
-							<span class="w-3 h-3 bg-orange-500 rounded-full"></span>
-							<span class="text-gray-700 font-medium">{$openCount} open</span>
-						</div>
-					{/if}
-					{#if $resolvedCount > 0}
-						<div class="flex items-center gap-2">
-							<span class="w-3 h-3 bg-green-500 rounded-full"></span>
-							<span class="text-gray-700 font-medium">{$resolvedCount} resolved</span>
-						</div>
-					{/if}
+	<!-- Stats bar -->
+	<div class="bg-white border-b border-gray-200 px-6 py-3">
+		<div class="max-w-6xl mx-auto flex items-center gap-6">
+			{#if $loading}
+				<div class="h-6 w-32 bg-gray-200 animate-pulse rounded"></div>
+			{:else}
+				<div class="flex items-center gap-2">
+					<span class="text-xl font-bold text-gray-800">{$markers.length}</span>
+					<span class="text-gray-500">total markers</span>
 				</div>
+				{#if $openCount > 0}
+					<div class="flex items-center gap-2">
+						<span class="w-3 h-3 bg-orange-500 rounded-full"></span>
+						<span class="text-gray-700 font-medium">{$openCount} open</span>
+					</div>
+				{/if}
+				{#if $resolvedCount > 0}
+					<div class="flex items-center gap-2">
+						<span class="w-3 h-3 bg-green-500 rounded-full"></span>
+						<span class="text-gray-700 font-medium">{$resolvedCount} resolved</span>
+					</div>
+				{/if}
 			{/if}
 		</div>
-	</header>
+	</div>
 
 	<!-- Main content -->
 	<main class="max-w-6xl mx-auto px-6 py-8">

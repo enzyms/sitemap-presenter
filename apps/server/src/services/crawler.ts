@@ -157,12 +157,8 @@ export class CrawlerService {
 
 					// Check if internal
 					if (resolved.host === baseHost) {
-						// Normalize: remove trailing slash and hash
-						let path = resolved.pathname;
-						if (path.endsWith('/') && path !== '/') {
-							path = path.slice(0, -1);
-						}
-						const normalized = `${resolved.protocol}//${resolved.host}${path}`;
+						// Keep URL as-is, only remove hash for deduplication
+						const normalized = `${resolved.protocol}//${resolved.host}${resolved.pathname}`;
 						if (!internalLinks.includes(normalized)) {
 							internalLinks.push(normalized);
 						}
@@ -206,13 +202,8 @@ export class CrawlerService {
 	private normalizeUrl(url: string): string {
 		try {
 			const parsed = new URL(url);
-			// Remove trailing slash for consistency
-			let path = parsed.pathname;
-			if (path.endsWith('/') && path !== '/') {
-				path = path.slice(0, -1);
-			}
-			// Remove hash and search params for deduplication
-			return `${parsed.protocol}//${parsed.host}${path}`;
+			// Keep URL as-is, only remove hash and search params for deduplication
+			return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
 		} catch {
 			return url;
 		}

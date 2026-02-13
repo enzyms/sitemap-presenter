@@ -1,354 +1,256 @@
 <script lang="ts">
-	import SitemapCanvas from '$lib/components/canvas/SitemapCanvas.svelte';
-	import ConfigPanel from '$lib/components/ui/ConfigPanel.svelte';
-	import ProgressBar from '$lib/components/ui/ProgressBar.svelte';
-	import SearchBar from '$lib/components/ui/SearchBar.svelte';
-	import ProjectDashboard from '$lib/components/ui/ProjectDashboard.svelte';
-	import ProjectSwitcher from '$lib/components/ui/ProjectSwitcher.svelte';
-	import PageViewer from '$lib/components/viewer/PageViewer.svelte';
-	import { sitemapStore } from '$lib/stores/sitemap';
-	import { projectsStore } from '$lib/stores/projects';
-	import { configStore } from '$lib/stores/config';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import AppHeader from '$lib/components/ui/AppHeader.svelte';
+	import { getSupabase, type SiteWithStats } from '$lib/services/supabase';
 
-	const CONFIG_PANEL_KEY = 'sitemap-presenter-config-panel';
+	let sites = $state<SiteWithStats[]>([]);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
+	let openMenuId = $state<string | null>(null);
 
-	const nodes = sitemapStore.nodes;
-	const zoomLevel = sitemapStore.zoomLevel;
-	const currentProjectId = projectsStore.currentProjectId;
-	const projects = projectsStore.projects;
-
-	let hasNodes = $derived($nodes.length > 0);
-	let showDashboard = $state(false);
-	let showConfig = $state(true);
-	let showNewProjectModal = $state(false);
-	let newProjectName = $state('');
-	let newProjectDescription = $state('');
-	let newProjectBaseUrl = $state('');
-
-	// Compute current project directly from $projects for full reactivity
-	let currentProject = $derived.by(() => {
-		if (!$currentProjectId) return null;
-		return $projects.find(p => p.id === $currentProjectId) ?? null;
-	});
-
-	// Count feedbacks for current project (open vs resolved)
-	let feedbackCounts = $derived.by(() => {
-		if (!$currentProjectId) return { open: 0, resolved: 0 };
-		const project = $projects.find(p => p.id === $currentProjectId);
-		if (!project?.cachedData?.feedbackMarkers) return { open: 0, resolved: 0 };
-		const allMarkers = Object.values(project.cachedData.feedbackMarkers).flat();
-		return {
-			open: allMarkers.filter(m => m.status === 'open').length,
-			resolved: allMarkers.filter(m => m.status === 'resolved').length
-		};
-	});
-
-	// Debug: track when projects/feedbacks change
-	$effect(() => {
-		const projectId = $currentProjectId;
-		const allProjects = $projects;
-		const project = projectId ? allProjects.find(p => p.id === projectId) : null;
-		if (project) {
-			const markers = project.cachedData?.feedbackMarkers;
-			const count = markers ? Object.values(markers).flat().length : 0;
-			console.log(`[+page] Current project "${project.name}" has ${count} feedback markers, projects.length=${allProjects.length}`);
-		} else {
-			console.log(`[+page] No current project. projectId=${projectId}, projects.length=${allProjects.length}`);
-		}
-	});
-
-	function toggleDashboard() {
-		showDashboard = !showDashboard;
+	function toggleMenu(e: Event, siteId: string) {
+		e.preventDefault();
+		e.stopPropagation();
+		openMenuId = openMenuId === siteId ? null : siteId;
 	}
 
-	function toggleConfig() {
-		showConfig = !showConfig;
+	function closeMenus() {
+		openMenuId = null;
+	}
+
+	async function handleDelete(e: Event, site: SiteWithStats) {
+		e.preventDefault();
+		e.stopPropagation();
+		openMenuId = null;
+
+		if (!confirm(`Are you sure you want to delete "${site.name}"? This will also delete all feedback markers and comments. This action cannot be undone.`)) {
+			return;
+		}
+
 		try {
-			localStorage.setItem(CONFIG_PANEL_KEY, JSON.stringify(showConfig));
+			const supabase = getSupabase();
+			const { error: deleteError } = await supabase
+				.from('sites')
+				.delete()
+				.eq('id', site.id);
+
+			if (deleteError) throw deleteError;
+
+			// Remove from local state
+			sites = sites.filter(s => s.id !== site.id);
+
+			// Clear localStorage cache
+			try {
+				localStorage.removeItem(`sitemap-cache-${site.id}`);
+			} catch {}
 		} catch (e) {
-			console.error('Failed to save config panel state:', e);
+			console.error('Failed to delete site:', e);
+			alert('Failed to delete site');
 		}
 	}
 
-	function handleCreateProject() {
-		if (!newProjectName.trim() || !newProjectBaseUrl.trim()) return;
+	function handleEdit(e: Event, siteId: string) {
+		e.preventDefault();
+		e.stopPropagation();
+		openMenuId = null;
+		goto(`/sites/${siteId}/settings`);
+	}
 
-		const baseUrl = newProjectBaseUrl.trim();
-		const project = projectsStore.createProject(
-			newProjectName.trim(),
-			newProjectDescription.trim(),
-			baseUrl
-		);
-		projectsStore.selectProject(project.id);
-		sitemapStore.clearAll();
+	async function loadSites() {
+		loading = true;
+		error = null;
 
-		// Sync the project's baseUrl to the config store so the crawl form has it pre-filled
-		configStore.setUrl(baseUrl);
+		try {
+			const supabase = getSupabase();
 
-		// Reset form
-		newProjectName = '';
-		newProjectDescription = '';
-		newProjectBaseUrl = '';
-		showNewProjectModal = false;
+			// Fetch sites with marker counts
+			const { data, error: fetchError } = await supabase
+				.from('sites')
+				.select(`
+					*,
+					markers (
+						id,
+						status
+					)
+				`)
+				.order('created_at', { ascending: false });
+
+			if (fetchError) throw fetchError;
+
+			// Transform to SiteWithStats
+			sites = (data || []).map(site => {
+				const markers = site.markers || [];
+				return {
+					...site,
+					markers: undefined,
+					marker_count: markers.length,
+					open_count: markers.filter((m: { status: string }) => m.status === 'open').length,
+					resolved_count: markers.filter((m: { status: string }) => m.status === 'resolved').length
+				} as SiteWithStats;
+			});
+		} catch (e) {
+			console.error('Failed to load sites:', e);
+			error = e instanceof Error ? e.message : 'Failed to load sites';
+		} finally {
+			loading = false;
+		}
+	}
+
+	function formatDate(dateStr: string): string {
+		return new Date(dateStr).toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
 	}
 
 	onMount(() => {
-		projectsStore.initialize();
-
-		// Load config panel state
-		try {
-			const savedConfig = localStorage.getItem(CONFIG_PANEL_KEY);
-			if (savedConfig !== null) {
-				showConfig = JSON.parse(savedConfig);
-			}
-		} catch (e) {
-			console.error('Failed to load config panel state:', e);
-		}
-
-		// Load cached data for restored project after a tick
-		setTimeout(() => {
-			if ($currentProjectId && $nodes.length === 0) {
-				// Sync the project's baseUrl to the config store
-				const project = projectsStore.getProject($currentProjectId);
-				if (project?.baseUrl) {
-					configStore.setUrl(project.baseUrl);
-				}
-
-				const cachedData = projectsStore.getCachedData($currentProjectId);
-				if (cachedData) {
-					// Augment nodes with feedback stats before loading
-					const feedbackMarkers = cachedData.feedbackMarkers || {};
-					const nodesWithFeedback = cachedData.nodes.map(node => {
-						try {
-							const url = new URL(node.data.url);
-							const pagePath = url.pathname;
-							const markers = feedbackMarkers[pagePath] || [];
-							const open = markers.filter(m => m.status === 'open').length;
-							const resolved = markers.filter(m => m.status === 'resolved').length;
-							return {
-								...node,
-								data: {
-									...node.data,
-									feedbackStats: {
-										total: markers.length,
-										open,
-										resolved,
-										allResolved: markers.length > 0 && open === 0
-									}
-								}
-							};
-						} catch {
-							return node;
-						}
-					});
-
-					sitemapStore.loadFromCache(nodesWithFeedback, cachedData.edges);
-
-					// Log feedback markers loaded from cache
-					const totalMarkers = Object.values(feedbackMarkers).flat().length;
-					const pagesWithFeedback = Object.keys(feedbackMarkers).length;
-					console.log(`[Sitemap] Loaded ${totalMarkers} feedback markers across ${pagesWithFeedback} pages`);
-				}
-			}
-		}, 0);
+		loadSites();
 	});
 </script>
 
 <svelte:head>
-	<title>{currentProject ? `Feedbacks - ${currentProject.name}` : 'Sitemap Presenter'}</title>
-	<meta name="description" content="Interactive sitemap visualization tool" />
+	<title>Sitemap Presenter - Dashboard</title>
+	<meta name="description" content="Interactive sitemap visualization and feedback tool" />
 </svelte:head>
 
-<div class="h-screen w-screen bg-gray-100 flex flex-col">
-	<!-- Project Dashboard Modal -->
-	<ProjectDashboard bind:showDashboard />
+<div class="h-screen w-screen bg-gray-50 flex flex-col">
+	<AppHeader />
 
-	<!-- Header -->
-	<header class="bg-white border-b border-gray-200 px-4 py-3 flex items-center z-10">
-		<!-- Left: Title + badges -->
-		<div class="flex items-center gap-4 flex-1">
-			<h1 class="text-xl font-bold text-gray-800">
-				{#if currentProject}
-					{currentProject.name}
-				{:else}
-					Sitemap Presenter
-				{/if}
-			</h1>
-
-			{#if hasNodes && currentProject && (feedbackCounts.open > 0 || feedbackCounts.resolved > 0)}
-				<div class="flex items-center gap-2">
-					{#if feedbackCounts.open > 0}
-						<span class="px-2 py-1 bg-orange-100 text-orange-700 rounded text-sm font-medium">
-							{feedbackCounts.open} open
-						</span>
-					{/if}
-					{#if feedbackCounts.resolved > 0}
-						<span class="px-2 py-1 bg-green-100 text-green-700 rounded text-sm font-medium">
-							{feedbackCounts.resolved} resolved
-						</span>
-					{/if}
-				</div>
-			{/if}
-		</div>
-
-		<!-- Center: Search -->
-		{#if hasNodes}
-			<div class="flex-1 flex justify-center">
-				<SearchBar />
+	<main class="flex-1 overflow-auto p-6">
+		<div class="max-w-6xl mx-auto">
+			<!-- Page header -->
+			<div class="mb-8">
+				<h1 class="text-2xl font-bold text-gray-900">Your Sites</h1>
+				<p class="text-gray-500 mt-1">Manage your websites and collect feedback</p>
 			</div>
-		{:else}
-			<div class="flex-1"></div>
-		{/if}
 
-		<!-- Right: Sites link + New project button + Dropdown -->
-		<div class="flex items-center gap-3 flex-1 justify-end">
-			<a
-				href="/sites"
-				class="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium"
-			>
-				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-				</svg>
-				Sites
-			</a>
-			<button
-				onclick={() => (showNewProjectModal = true)}
-				class="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
-			>
-				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-				</svg>
-				New project
-			</button>
-			<ProjectSwitcher />
-		</div>
-	</header>
-
-	<!-- Main content -->
-	<main class="flex-1 relative overflow-hidden">
-		<!-- Canvas -->
-		<div class="absolute inset-0">
-			{#if hasNodes}
-				<SitemapCanvas />
-			{:else}
-				<!-- Empty state -->
-				<div class="w-full h-full flex items-center justify-center bg-gray-50">
-					<div class="text-center">
-						<svg
-							class="w-24 h-24 mx-auto text-gray-300 mb-4"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.5"
-								d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
-							/>
-						</svg>
-						<h2 class="text-xl font-medium text-gray-600 mb-2">No sitemap loaded</h2>
-						<p class="text-gray-400">Enter a URL in the panel to start crawling</p>
-					</div>
-				</div>
-			{/if}
-		</div>
-
-		<!-- Left sidebar - Config panel (togglable) -->
-		<div class="absolute top-4 left-4 z-10 space-y-4">
-			{#if showConfig}
-				<div class="transform transition-all duration-300 ease-out origin-top">
-					<ConfigPanel onClose={toggleConfig} />
-				</div>
-			{:else}
-				<button
-					onclick={toggleConfig}
-					class="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow border border-gray-200 text-sm font-medium text-gray-700"
-				>
-					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+			{#if loading}
+				<div class="flex items-center justify-center py-12">
+					<svg class="w-8 h-8 animate-spin text-orange-500" fill="none" viewBox="0 0 24 24">
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 					</svg>
-					Config and crawling
-				</button>
-			{/if}
-			<ProgressBar />
-		</div>
-
-		<!-- Zoom level indicator -->
-		{#if hasNodes}
-			<div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
-				<div class="bg-white/80 backdrop-blur px-3 py-1 rounded-full shadow text-sm text-gray-600">
-					Zoom: {Math.round($zoomLevel * 100)}%
 				</div>
-			</div>
-		{/if}
-	</main>
-
-	<!-- Page Viewer Modal -->
-	<PageViewer />
-
-	<!-- New Project Modal -->
-	{#if showNewProjectModal}
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => (showNewProjectModal = false)}>
-			<div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" onclick={(e) => e.stopPropagation()}>
-				<h2 class="text-xl font-bold text-gray-800 mb-4">New Project</h2>
-				<form onsubmit={(e) => { e.preventDefault(); handleCreateProject(); }}>
-					<div class="space-y-4">
-						<div>
-							<label for="project-name" class="block text-sm font-medium text-gray-700 mb-1">Project name *</label>
-							<input
-								id="project-name"
-								type="text"
-								bind:value={newProjectName}
-								placeholder="My Website"
-								class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-								required
-							/>
-						</div>
-						<div>
-							<label for="project-url" class="block text-sm font-medium text-gray-700 mb-1">Base URL *</label>
-							<input
-								id="project-url"
-								type="url"
-								bind:value={newProjectBaseUrl}
-								placeholder="https://example.com"
-								class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-								required
-							/>
-						</div>
-						<div>
-							<label for="project-description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-							<textarea
-								id="project-description"
-								bind:value={newProjectDescription}
-								placeholder="Optional description..."
-								rows="2"
-								class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-							></textarea>
-						</div>
+			{:else if error}
+				<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+					{error}
+				</div>
+			{:else if sites.length === 0}
+				<!-- Empty state -->
+				<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+					<div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+						<svg class="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+						</svg>
 					</div>
-					<div class="flex justify-end gap-3 mt-6">
-						<button
-							type="button"
-							onclick={() => (showNewProjectModal = false)}
-							class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+					<h2 class="text-xl font-semibold text-gray-900 mb-2">No sites yet</h2>
+					<p class="text-gray-500 mb-6">Create your first site to start crawling and collecting feedback</p>
+					<a
+						href="/sites/new"
+						class="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+					>
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+						</svg>
+						Create your first site
+					</a>
+				</div>
+			{:else}
+				<!-- Sites grid -->
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" onclick={closeMenus}>
+					{#each sites as site (site.id)}
+						<a
+							href="/sites/{site.id}/map"
+							class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md hover:border-orange-200 transition-all group relative"
 						>
-							Cancel
-						</button>
-						<button
-							type="submit"
-							disabled={!newProjectName.trim() || !newProjectBaseUrl.trim()}
-							class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-						>
-							Create
-						</button>
-					</div>
-				</form>
-			</div>
+							<div class="flex items-start justify-between mb-4">
+								<div class="flex-1 min-w-0 pr-2">
+									<h3 class="font-semibold text-gray-900 group-hover:text-orange-600 transition-colors truncate">
+										{site.name}
+									</h3>
+									<p class="text-sm text-gray-500 truncate">{site.domain}</p>
+								</div>
+								<div class="flex items-center gap-2">
+									<!-- Kebab menu -->
+									<div class="relative">
+										<button
+											onclick={(e) => toggleMenu(e, site.id)}
+											class="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+											aria-label="Site options"
+										>
+											<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+												<circle cx="12" cy="5" r="2" />
+												<circle cx="12" cy="12" r="2" />
+												<circle cx="12" cy="19" r="2" />
+											</svg>
+										</button>
+										{#if openMenuId === site.id}
+											<div class="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+												<button
+													onclick={(e) => handleEdit(e, site.id)}
+													class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+												>
+													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+													</svg>
+													Edit
+												</button>
+												<button
+													onclick={(e) => handleDelete(e, site)}
+													class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+												>
+													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+													</svg>
+													Delete
+												</button>
+											</div>
+										{/if}
+									</div>
+								</div>
+							</div>
+
+							<!-- Stats -->
+							<div class="flex items-center gap-4 mb-4">
+								{#if site.marker_count > 0}
+									<div class="flex items-center gap-1.5">
+										<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+										</svg>
+										<span class="text-sm text-gray-600">{site.marker_count} markers</span>
+									</div>
+									{#if site.open_count > 0}
+										<span class="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full font-medium">
+											{site.open_count} open
+										</span>
+									{/if}
+									{#if site.resolved_count > 0}
+										<span class="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+											{site.resolved_count} resolved
+										</span>
+									{/if}
+								{:else}
+									<span class="text-sm text-gray-400">No feedback yet</span>
+								{/if}
+							</div>
+
+							<!-- Footer -->
+							<div class="flex items-center justify-between text-xs text-gray-400 pt-4 border-t border-gray-100">
+								<span>Created {formatDate(site.created_at)}</span>
+								<span class="flex items-center gap-1 text-orange-500 group-hover:text-orange-600">
+									View site
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+									</svg>
+								</span>
+							</div>
+						</a>
+					{/each}
+				</div>
+			{/if}
 		</div>
-	{/if}
+	</main>
 </div>

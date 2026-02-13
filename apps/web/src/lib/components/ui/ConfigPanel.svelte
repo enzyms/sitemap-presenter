@@ -107,22 +107,22 @@
 	<div class="p-4">
 		<!-- Current Project Info -->
 		{#if currentProject}
-			<div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+			<div class="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-md">
 				<div class="flex items-center justify-between mb-1">
-					<span class="text-xs font-medium text-blue-700">Current Project</span>
+					<span class="text-xs font-medium text-orange-700">Current Project</span>
 					{#if hasCachedData}
 						<button
 							onclick={loadCachedData}
-							class="text-xs text-blue-600 hover:text-blue-800 underline"
+							class="text-xs text-orange-600 hover:text-orange-800 underline"
 							title="Reload cached data"
 						>
 							Load Cache
 						</button>
 					{/if}
 				</div>
-				<p class="text-sm font-semibold text-blue-900">{currentProject.name}</p>
+				<p class="text-sm font-semibold text-orange-900">{currentProject.name}</p>
 				{#if hasCachedData}
-					<p class="text-xs text-blue-600 mt-1">
+					<p class="text-xs text-orange-600 mt-1">
 						{currentProject.cachedData?.nodes.length || 0} pages cached
 					</p>
 				{/if}
@@ -141,7 +141,7 @@
 					value={$config.url}
 					oninput={handleUrlChange}
 					placeholder="https://example.com"
-					class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+					class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
 					disabled={isCrawling}
 					required
 				/>
@@ -216,7 +216,7 @@
 					<button
 						type="submit"
 						disabled={isLoading || !$config.url}
-						class="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+						class="flex-1 px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 					>
 						{#if isLoading}
 							<span class="flex items-center justify-center gap-2">
