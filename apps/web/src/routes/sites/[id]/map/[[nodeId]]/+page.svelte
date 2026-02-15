@@ -1,10 +1,12 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { onMount, onDestroy } from 'svelte';
+	import { page } from '$app/state';
+	import { replaceState, afterNavigate } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import AppHeader from '$lib/components/ui/AppHeader.svelte';
 	import SitemapCanvas from '$lib/components/canvas/SitemapCanvas.svelte';
 	import PageViewer from '$lib/components/viewer/PageViewer.svelte';
 	import { sitemapStore } from '$lib/stores/sitemap.svelte';
+	import { pageViewerStore } from '$lib/stores/pageViewer.svelte';
 	import { configStore } from '$lib/stores/config.svelte';
 	import { feedbackStore } from '$lib/stores/feedback.svelte';
 	import { getSupabase, type Site } from '$lib/services/supabase';
@@ -13,10 +15,15 @@
 	import { crawlCacheService } from '$lib/services/crawlCacheService';
 	import type { PageNode, FeedbackStats } from '$lib/types';
 
-	let siteId = $derived($page.params.id!);
+	let siteId = $derived(page.params.id!);
 	let site = $state<Site | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let initialNodeId = page.params.nodeId ?? null;
+	let initialView = page.url.searchParams.get('view');
+
+	let routerReady = $state(false);
+	afterNavigate(() => { routerReady = true; });
 
 	let hasNodes = $derived(sitemapStore.nodes.length > 0);
 
@@ -187,6 +194,56 @@
 		if (sitemapStore.nodes.length > 0 && site) {
 			saveSitemapCache();
 		}
+	});
+
+	// Apply initial URL state once nodes are loaded
+	$effect(() => {
+		if (sitemapStore.nodes.length > 0 && initialNodeId) {
+			const nodeId = initialNodeId;
+			// Clear so this only runs once
+			initialNodeId = null;
+
+			const node = sitemapStore.nodes.find((n) => n.id === nodeId);
+			if (node) {
+				sitemapStore.selectNode(nodeId);
+				pageViewerStore.openViewer(
+					node.data.url,
+					node.data.title,
+					node.data.thumbnailUrl || null,
+					nodeId
+				);
+			}
+		}
+	});
+
+	// Apply initial view mode from URL
+	$effect(() => {
+		if (initialView && sitemapStore.nodes.length > 0) {
+			const view = initialView;
+			initialView = null;
+			if (view === 'radial' && sitemapStore.layoutMode !== 'radial') {
+				sitemapStore.setLayoutMode('radial');
+			}
+		}
+	});
+
+	// Sync selectedNodeId + layoutMode → URL (only after router is ready)
+	$effect(() => {
+		const nodeId = sitemapStore.selectedNodeId;
+		const layoutMode = sitemapStore.layoutMode;
+
+		if (!routerReady || !siteId) return;
+
+		const path = nodeId
+			? `/sites/${siteId}/map/${nodeId}`
+			: `/sites/${siteId}/map`;
+
+		const url = new URL(path, page.url.origin);
+		if (layoutMode === 'radial') {
+			url.searchParams.set('view', 'radial');
+		}
+
+		replaceState(url, { selectedNodeId: nodeId });
 	});
 
 	function handleBeforeUnload() {

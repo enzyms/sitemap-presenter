@@ -27,6 +27,14 @@
 
 	let feedbackMarkers = $derived(feedbackStore.markersForCurrentPage.map(convertSupabaseMarkerToFeedback));
 
+	// Feedback navigation
+	let feedbackNodeCount = $derived(sitemapStore.nodesWithFeedback.length);
+	let currentFeedbackIndex = $derived.by(() => {
+		if (feedbackNodeCount === 0) return -1;
+		return sitemapStore.nodesWithFeedback.findIndex((n) => n.id === sitemapStore.selectedNodeId);
+	});
+	let showFeedbackNav = $derived(feedbackNodeCount >= 2);
+
 	// Keep messenger iframe ref in sync
 	$effect(() => {
 		messenger.setIframe(iframeRef);
@@ -61,6 +69,27 @@
 		initialLoadComplete = false;
 		iframeSrc = null;
 		if (loadTimeout) clearTimeout(loadTimeout);
+	}
+
+	function navigateToFeedbackNode(direction: 'prev' | 'next') {
+		const node = sitemapStore.navigateToFeedbackNode(direction);
+		if (!node) return;
+
+		// Update PageViewer content
+		pageViewerStore.openViewer(
+			node.data.url,
+			node.data.title,
+			node.data.thumbnailUrl || null,
+			node.id
+		);
+
+		// Reset iframe state for new page
+		iframeLoaded = false;
+		iframeError = false;
+		useScreenshot = false;
+		initialLoadComplete = false;
+		iframeSrc = null;
+		highlightedMarkerId = null;
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
@@ -235,6 +264,32 @@
 			</div>
 
 			<div class="flex items-center gap-3">
+				{#if showFeedbackNav}
+					<div class="flex items-center gap-1">
+						<button
+							onclick={() => navigateToFeedbackNode('prev')}
+							class="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+							title="Previous page with feedback"
+						>
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+							</svg>
+						</button>
+						<span class="px-2 py-1 text-xs font-medium text-gray-500 tabular-nums">
+							{currentFeedbackIndex >= 0 ? currentFeedbackIndex + 1 : '–'}/{feedbackNodeCount}
+						</span>
+						<button
+							onclick={() => navigateToFeedbackNode('next')}
+							class="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+							title="Next page with feedback"
+						>
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+							</svg>
+						</button>
+					</div>
+				{/if}
+
 				<button
 					onclick={() => (showFeedbackSidebar = !showFeedbackSidebar)}
 					class="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"

@@ -56,6 +56,20 @@ class SitemapStore {
 		return this.nodes.find((n) => n.id === this.selectedNodeId) || null;
 	});
 
+	nodesWithFeedback = $derived.by(() => {
+		return this.nodes
+			.filter((n) => n.data.feedbackStats && n.data.feedbackStats.total > 0)
+			.sort((a, b) => {
+				try {
+					const pathA = new URL(a.data.url).pathname;
+					const pathB = new URL(b.data.url).pathname;
+					return pathA.localeCompare(pathB);
+				} catch {
+					return 0;
+				}
+			});
+	});
+
 	setSiteId(siteId: string) {
 		this.currentSiteId = siteId;
 	}
@@ -524,6 +538,26 @@ class SitemapStore {
 
 	selectNode(id: string | null) {
 		this.selectedNodeId = id;
+	}
+
+	navigateToFeedbackNode(direction: 'prev' | 'next'): PageNode | null {
+		const feedbackNodes = this.nodesWithFeedback;
+		if (feedbackNodes.length === 0) return null;
+
+		const currentIndex = feedbackNodes.findIndex((n) => n.id === this.selectedNodeId);
+		let targetIndex: number;
+
+		if (currentIndex === -1) {
+			targetIndex = 0;
+		} else if (direction === 'next') {
+			targetIndex = (currentIndex + 1) % feedbackNodes.length;
+		} else {
+			targetIndex = (currentIndex - 1 + feedbackNodes.length) % feedbackNodes.length;
+		}
+
+		const target = feedbackNodes[targetIndex];
+		this.selectedNodeId = target.id;
+		return target;
 	}
 
 	setSearchQuery(query: string) {

@@ -8,7 +8,6 @@
 		Panel,
 		MarkerType,
 		SelectionMode,
-		useSvelteFlow,
 		type NodeTypes,
 		type EdgeTypes
 	} from '@xyflow/svelte';
@@ -17,6 +16,7 @@
 
 	import PageNode from './PageNode.svelte';
 	import LinkEdge from './LinkEdge.svelte';
+	import NodeFocuser from './NodeFocuser.svelte';
 	import { sitemapStore } from '$lib/stores/sitemap.svelte';
 	import { configStore } from '$lib/stores/config.svelte';
 	import { apiService } from '$lib/services/api';
@@ -423,5 +423,6 @@
 		<Controls />
 		<MiniMap nodeColor={getNodeColor} maskColor="rgb(0, 0, 0, 0.1)" />
 		<Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+		<NodeFocuser />
 	</SvelteFlow>
 </div>
