@@ -19,7 +19,11 @@
 	let iframeRef = $state<HTMLIFrameElement | null>(null);
 	let highlightedMarkerId = $state<string | null>(null);
 	let showFeedbackSidebar = $state(true);
-	let feedbackInitialized = $state(false);
+	let initialLoadComplete = $state(false);
+
+	// Iframe src is set once when the viewer opens; never updated on in-iframe navigation
+	// so that changing the display URL doesn't cause the iframe to reload.
+	let iframeSrc = $state<string | null>(null);
 
 	let feedbackMarkers = $derived(feedbackStore.markersForCurrentPage.map(convertSupabaseMarkerToFeedback));
 
@@ -34,13 +38,28 @@
 		}
 	});
 
+	// Reactively filter feedbacks to the current page.
+	// feedbackStore is already initialized by the map page — we just set the filter.
+	$effect(() => {
+		if (pageViewerStore.isOpen && pageViewerStore.pageUrl) {
+			try {
+				const pathname = new URL(pageViewerStore.pageUrl).pathname;
+				feedbackStore.setCurrentPage(pathname);
+			} catch {
+				// invalid URL — leave filter as-is
+			}
+		}
+	});
+
 	function handleClose() {
 		pageViewerStore.closeViewer();
+		feedbackStore.setCurrentPage(null);
 		iframeLoaded = false;
 		iframeError = false;
 		useScreenshot = false;
 		highlightedMarkerId = null;
-		feedbackInitialized = false;
+		initialLoadComplete = false;
+		iframeSrc = null;
 		if (loadTimeout) clearTimeout(loadTimeout);
 	}
 
@@ -48,9 +67,44 @@
 		if (pageViewerStore.isOpen && event.key === 'Escape') handleClose();
 	}
 
+	/** Normalize URL for comparison: strip trailing slash */
+	function normalizeUrl(url: string): string {
+		try {
+			const u = new URL(url);
+			const pathname = u.pathname.replace(/\/+$/, '') || '/';
+			return `${u.origin}${pathname}${u.search}`;
+		} catch {
+			return url;
+		}
+	}
+
+	function findNodeByUrl(url: string): (typeof sitemapStore.nodes)[number] | undefined {
+		const normalized = normalizeUrl(url);
+		return sitemapStore.nodes.find((n) => normalizeUrl(n.data.url) === normalized);
+	}
+
 	function handleIframeLoad() {
 		iframeLoaded = true;
 		if (loadTimeout) clearTimeout(loadTimeout);
+
+		if (!initialLoadComplete) {
+			initialLoadComplete = true;
+			return;
+		}
+
+		// Subsequent load events mean navigation happened inside the iframe.
+		// Try to read the new URL (works when same-origin, throws when cross-origin).
+		if (!iframeRef) return;
+		try {
+			const newUrl = iframeRef.contentWindow?.location.href;
+			const newTitle = iframeRef.contentDocument?.title || '';
+			if (newUrl && normalizeUrl(newUrl) !== normalizeUrl(pageViewerStore.pageUrl || '')) {
+				handleIframeNavigation(newUrl, newTitle);
+			}
+		} catch {
+			// Cross-origin – cannot read URL.
+			// Navigation detection relies on the widget's FEEDBACK_NAVIGATION postMessage.
+		}
 	}
 
 	function handleIframeError() {
@@ -64,7 +118,7 @@
 		if (loadTimeout) clearTimeout(loadTimeout);
 	}
 
-	// Handle messages from iframe
+	// Handle messages from iframe (widget postMessage)
 	function handleIframeMessage(data: IframeToSitemapMessage) {
 		switch (data.type) {
 			case 'FEEDBACK_ACTION_CONFIRMED':
@@ -77,21 +131,25 @@
 	}
 
 	function handleIframeNavigation(newUrl: string, newTitle: string, markers?: FeedbackMarker[]) {
+		// Update the display URL + title (does NOT touch iframeSrc, so no iframe reload).
+		// This also triggers the $effect above which filters feedbacks to this page.
 		pageViewerStore.updateCurrentPage(newUrl, newTitle);
 
-		const matchingNode = sitemapStore.nodes.find((n) => n.data.url === newUrl);
+		// Find & select the matching node
+		const matchingNode = findNodeByUrl(newUrl);
 		if (matchingNode) {
 			sitemapStore.selectNode(matchingNode.id);
-			if (matchingNode.data.fullScreenshotUrl || matchingNode.data.thumbnailUrl) {
-				pageViewerStore.updateScreenshot(
-					matchingNode.data.fullScreenshotUrl || matchingNode.data.thumbnailUrl || null
-				);
+			if (matchingNode.data.thumbnailUrl) {
+				pageViewerStore.updateScreenshot(matchingNode.data.thumbnailUrl || null);
 			}
+		} else {
+			sitemapStore.selectNode(null);
+			pageViewerStore.updateScreenshot(null);
 		}
 
 		highlightedMarkerId = null;
-		markerSync.setCurrentPage(newUrl);
 
+		// Cache widget-provided markers on the project
 		if (markers && markers.length > 0 && projectsStore.currentProjectId && pageViewerStore.pageUrl) {
 			markerSync.saveToProjectCache(projectsStore.currentProjectId, pageViewerStore.pageUrl, markers);
 		}
@@ -122,9 +180,13 @@
 		messenger.addComment(markerId, content);
 	}
 
-	// Initialize when viewer opens
+	// Manage iframe loading state
 	$effect(() => {
 		if (pageViewerStore.isOpen && !useScreenshot) {
+			if (!iframeSrc) {
+				iframeSrc = pageViewerStore.pageUrl;
+			}
+
 			iframeLoaded = false;
 			iframeError = false;
 			loadTimeout = setTimeout(() => {
@@ -133,23 +195,10 @@
 					iframeLoaded = true;
 				}
 			}, 8000);
-
-			if (!feedbackInitialized && projectsStore.currentProjectId && pageViewerStore.pageUrl) {
-				markerSync.initialize(projectsStore.currentProjectId, pageViewerStore.pageUrl).then(() => {
-					feedbackInitialized = true;
-				});
-			}
 		}
 		return () => {
 			if (loadTimeout) clearTimeout(loadTimeout);
 		};
-	});
-
-	// Update page filter when URL changes
-	$effect(() => {
-		if (pageViewerStore.pageUrl && feedbackInitialized) {
-			markerSync.setCurrentPage(pageViewerStore.pageUrl);
-		}
 	});
 
 	onMount(() => {
@@ -273,10 +322,10 @@
 						</div>
 					{/if}
 
-					{#if pageViewerStore.pageUrl && !iframeError}
+					{#if iframeSrc && !iframeError}
 						<iframe
 							bind:this={iframeRef}
-							src={pageViewerStore.pageUrl}
+							src={iframeSrc}
 							title={pageViewerStore.pageTitle}
 							class="absolute inset-0 w-full h-full border-0"
 							onload={handleIframeLoad}

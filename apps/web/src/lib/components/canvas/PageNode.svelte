@@ -91,8 +91,7 @@
 		pageViewerStore.openViewer(
 			data.url,
 			data.title,
-			data.thumbnailUrl || null,
-			data.fullScreenshotUrl || null
+			data.thumbnailUrl || null
 		);
 	}
 </script>

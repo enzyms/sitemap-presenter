@@ -3,7 +3,6 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { wsHandler } from './websocket/handler.js';
 import crawlRoutes from './routes/crawl.js';
-import screenshotRoutes from './routes/screenshots.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -17,7 +16,6 @@ app.use(express.json());
 
 // Routes
 app.use('/api/crawl', crawlRoutes);
-app.use('/api/screenshots', screenshotRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

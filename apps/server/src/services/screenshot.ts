@@ -1,20 +1,11 @@
 import { chromium, Browser, Page } from 'playwright';
 import sharp from 'sharp';
 import { createHash } from 'crypto';
-import { writeFile, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SCREENSHOTS_DIR = path.join(__dirname, '../../screenshots');
+import { getSupabaseAdmin, SCREENSHOTS_BUCKET } from './supabaseClient.js';
 
 interface ScreenshotResult {
 	url: string;
-	filename: string;
-	thumbnailPath: string;
-	fullPageFilename?: string;
-	fullPagePath?: string;
+	thumbnailUrl: string;
 	success: boolean;
 	error?: string;
 }
@@ -25,11 +16,6 @@ export class ScreenshotService {
 
 	async initialize(): Promise<void> {
 		if (this.isInitialized) return;
-
-		// Ensure screenshots directory exists
-		if (!existsSync(SCREENSHOTS_DIR)) {
-			await mkdir(SCREENSHOTS_DIR, { recursive: true });
-		}
 
 		this.browser = await chromium.launch({
 			headless: true,
@@ -45,15 +31,19 @@ export class ScreenshotService {
 		}
 
 		const hash = this.generateHash(url);
-		const filename = `${hash}.jpg`;
-		const fullPageFilename = `${hash}_full.jpg`;
-		const thumbnailPath = path.join(SCREENSHOTS_DIR, filename);
-		const fullPagePath = path.join(SCREENSHOTS_DIR, fullPageFilename);
+		const thumbnailKey = `thumbnails/${hash}.webp`;
 
-		// Check if screenshots already exist (cache hit)
-		if (existsSync(thumbnailPath) && existsSync(fullPagePath)) {
+		const supabase = getSupabaseAdmin();
+
+		// Check if thumbnail already exists in Supabase (cache hit)
+		const { data: existing } = await supabase.storage.from(SCREENSHOTS_BUCKET).list('thumbnails', {
+			search: `${hash}.webp`
+		});
+
+		if (existing && existing.length > 0) {
 			console.log(`Screenshot cache hit for ${url}`);
-			return { url, filename, thumbnailPath, fullPageFilename, fullPagePath, success: true };
+			const { data: { publicUrl: thumbnailUrl } } = supabase.storage.from(SCREENSHOTS_BUCKET).getPublicUrl(thumbnailKey);
+			return { url, thumbnailUrl, success: true };
 		}
 
 		let page: Page | null = null;
@@ -73,34 +63,36 @@ export class ScreenshotService {
 			// Wait a bit for any lazy-loaded content
 			await page.waitForTimeout(1000);
 
-			// Take full-page screenshot (for the viewer)
-			const fullPageBuffer = await page.screenshot({
-				type: 'jpeg',
-				quality: 85,
-				fullPage: true
-			});
+			// Take viewport screenshot as PNG (lossless input for Sharp)
+			const screenshotBuffer = await page.screenshot({ type: 'png' });
 
-			// Save full-page screenshot
-			await writeFile(fullPagePath, fullPageBuffer);
-
-			// Create thumbnail from the full-page screenshot (crop from top)
-			const thumbnail = await sharp(fullPageBuffer)
+			// Create thumbnail WebP
+			const thumbnailWebp = await sharp(screenshotBuffer)
 				.resize(600, 400, {
 					fit: 'cover',
 					position: 'top'
 				})
-				.jpeg({ quality: 75 })
+				.webp({ quality: 60 })
 				.toBuffer();
 
-			// Save thumbnail
-			await writeFile(thumbnailPath, thumbnail);
+			// Upload thumbnail to Supabase Storage
+			const { error: thumbError } = await supabase.storage
+				.from(SCREENSHOTS_BUCKET)
+				.upload(thumbnailKey, thumbnailWebp, {
+					contentType: 'image/webp',
+					upsert: true
+				});
+
+			if (thumbError) {
+				throw new Error(`Thumbnail upload failed: ${thumbError.message}`);
+			}
+
+			// Get public URL
+			const { data: { publicUrl: thumbnailUrl } } = supabase.storage.from(SCREENSHOTS_BUCKET).getPublicUrl(thumbnailKey);
 
 			return {
 				url,
-				filename,
-				thumbnailPath,
-				fullPageFilename,
-				fullPagePath,
+				thumbnailUrl,
 				success: true
 			};
 		} catch (error) {
@@ -109,10 +101,7 @@ export class ScreenshotService {
 
 			return {
 				url,
-				filename,
-				thumbnailPath,
-				fullPageFilename,
-				fullPagePath,
+				thumbnailUrl: '',
 				success: false,
 				error: errorMessage
 			};
@@ -141,8 +130,17 @@ export class ScreenshotService {
 		return createHash('md5').update(url).digest('hex').slice(0, 16);
 	}
 
-	getScreenshotPath(hash: string): string {
-		return path.join(SCREENSHOTS_DIR, `${hash}.jpg`);
+	async deleteByUrls(pageUrls: string[]): Promise<number> {
+		const supabase = getSupabaseAdmin();
+		const paths = pageUrls.map((url) => `thumbnails/${this.generateHash(url)}.webp`);
+
+		const { error } = await supabase.storage.from(SCREENSHOTS_BUCKET).remove(paths);
+		if (error) {
+			console.error('Failed to delete screenshots from storage:', error.message);
+			return 0;
+		}
+
+		return paths.length;
 	}
 
 	async close(): Promise<void> {

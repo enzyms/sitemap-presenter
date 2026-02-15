@@ -14,7 +14,6 @@ export interface PageData extends Record<string, unknown> {
 	parentUrl: string | null;
 	menuType?: 'main' | 'user' | 'other';
 	thumbnailUrl?: string;
-	fullScreenshotUrl?: string;
 	screenshotStatus: 'pending' | 'processing' | 'ready' | 'error';
 	links: string[];
 	internalLinks: string[];
@@ -71,7 +70,6 @@ export interface PageDiscoveredEvent {
 export interface PageScreenshotEvent {
 	url: string;
 	thumbnailUrl: string;
-	fullScreenshotUrl?: string;
 }
 
 export interface CrawlProgressEvent {

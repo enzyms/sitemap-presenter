@@ -49,6 +49,20 @@ class ApiService {
 		return response.json();
 	}
 
+	async deleteScreenshots(pageUrls: string[]): Promise<void> {
+		if (pageUrls.length === 0) return;
+
+		const response = await fetch(`${API_BASE}/crawl/screenshots/delete`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ pageUrls })
+		});
+
+		if (!response.ok) {
+			console.error('Failed to delete screenshots from storage');
+		}
+	}
+
 	async cancelCrawl(sessionId: string): Promise<void> {
 		const response = await fetch(`${API_BASE}/crawl/${sessionId}`, {
 			method: 'DELETE'
@@ -57,10 +71,6 @@ class ApiService {
 		if (!response.ok) {
 			await parseErrorResponse(response, 'Failed to cancel crawl');
 		}
-	}
-
-	getScreenshotUrl(hash: string): string {
-		return `${API_BASE}/screenshots/${hash}`;
 	}
 }
 

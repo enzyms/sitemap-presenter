@@ -4,6 +4,9 @@
 	import AppHeader from '$lib/components/ui/AppHeader.svelte';
 	import { getSupabase, type SiteWithStats } from '$lib/services/supabase';
 	import { screenshotCache } from '$lib/services/screenshotCache';
+	import { layoutPositions } from '$lib/services/layoutPositions';
+	import { crawlCacheService } from '$lib/services/crawlCacheService';
+	import { apiService } from '$lib/services/api';
 	import { formatDate } from '$lib/utils/formatDate';
 
 	let sites = $state<SiteWithStats[]>([]);
@@ -48,18 +51,22 @@
 			// Remove from local state
 			sites = sites.filter(s => s.id !== site.id);
 
-			// Clear localStorage cache (sitemap data + node positions for both layout modes)
-			try {
-				localStorage.removeItem(`sitemap-cache-${site.id}`);
-				localStorage.removeItem(`sitemap-node-positions-${site.id}-hierarchical`);
-				localStorage.removeItem(`sitemap-node-positions-${site.id}-radial`);
-			} catch {}
+			// Clear crawl cache (localStorage + Supabase)
+			await crawlCacheService.deleteForSite(site.id);
 
-			// Clear IndexedDB screenshot cache
+			// Clear layout positions (localStorage + Supabase)
+			await layoutPositions.deleteLayoutsForSite(site.id);
+
+			// Delete screenshots from Supabase Storage + IndexedDB cache
 			try {
+				const cached = await screenshotCache.getAllForSite(site.id);
+				if (cached.length > 0) {
+					const pageUrls = cached.map((c) => c.url);
+					await apiService.deleteScreenshots(pageUrls);
+				}
 				await screenshotCache.deleteBySiteId(site.id);
 			} catch (e) {
-				console.error('Failed to clear screenshot cache:', e);
+				console.error('Failed to clear screenshots:', e);
 			}
 		} catch (e) {
 			console.error('Failed to delete site:', e);

@@ -103,12 +103,7 @@ router.get('/:id/sitemap', (req: Request, res: Response) => {
 				url: page.url,
 				title: page.title,
 				depth: page.depth,
-				thumbnailUrl: screenshotInfo
-					? `/api/screenshots/${screenshotInfo.thumbnailFilename}`
-					: undefined,
-				fullScreenshotUrl: screenshotInfo?.fullPageFilename
-					? `/api/screenshots/full/${screenshotInfo.fullPageFilename}`
-					: undefined,
+				thumbnailUrl: screenshotInfo?.thumbnailUrl,
 				screenshotStatus: screenshotInfo ? 'ready' : 'pending',
 				links: page.links,
 				internalLinks: page.internalLinks,
@@ -165,6 +160,24 @@ router.delete('/:id', (req: Request, res: Response) => {
 	res.json({ message: 'Crawl cancelled' });
 });
 
+// POST /api/crawl/screenshots/delete - Delete screenshots from Supabase Storage
+router.post('/screenshots/delete', async (req: Request, res: Response) => {
+	const { pageUrls } = req.body as { pageUrls: string[] };
+
+	if (!Array.isArray(pageUrls) || pageUrls.length === 0) {
+		res.status(400).json({ error: 'pageUrls array is required' });
+		return;
+	}
+
+	try {
+		const deleted = await screenshotService.deleteByUrls(pageUrls);
+		res.json({ deleted });
+	} catch (error) {
+		console.error('Screenshot deletion failed:', error);
+		res.status(500).json({ error: 'Failed to delete screenshots' });
+	}
+});
+
 // Background crawl function
 async function startCrawl(sessionId: string): Promise<void> {
 	const session = sessionManager.getSession(sessionId);
@@ -214,14 +227,11 @@ async function startCrawl(sessionId: string): Promise<void> {
 		const result = await screenshotService.takeScreenshot(url);
 
 		if (result.success) {
-			sessionManager.addScreenshot(sessionId, url, result.filename, result.fullPageFilename);
+			sessionManager.addScreenshot(sessionId, url, result.thumbnailUrl);
 
 			wsHandler.emitPageScreenshot(sessionId, {
 				url,
-				thumbnailUrl: `/api/screenshots/${result.filename}`,
-				fullScreenshotUrl: result.fullPageFilename
-					? `/api/screenshots/full/${result.fullPageFilename}`
-					: undefined
+				thumbnailUrl: result.thumbnailUrl
 			});
 		}
 

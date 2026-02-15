@@ -17,8 +17,7 @@
 			pageViewerStore.openViewer(
 				sitemapStore.selectedNode.data.url,
 				sitemapStore.selectedNode.data.title,
-				sitemapStore.selectedNode.data.thumbnailUrl || null,
-				sitemapStore.selectedNode.data.fullScreenshotUrl || null
+				sitemapStore.selectedNode.data.thumbnailUrl || null
 			);
 		}
 	}

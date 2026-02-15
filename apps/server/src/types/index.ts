@@ -17,8 +17,7 @@ export interface PageInfo {
 }
 
 export interface ScreenshotInfo {
-	thumbnailFilename: string;
-	fullPageFilename?: string;
+	thumbnailUrl: string;
 }
 
 export interface CrawlSession {
@@ -52,7 +51,6 @@ export interface PageDiscoveredEvent {
 export interface PageScreenshotEvent {
 	url: string;
 	thumbnailUrl: string;
-	fullScreenshotUrl?: string;
 }
 
 export interface CrawlProgressEvent {

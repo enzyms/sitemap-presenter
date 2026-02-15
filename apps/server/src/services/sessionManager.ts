@@ -34,10 +34,10 @@ class SessionManager {
 		}
 	}
 
-	addScreenshot(sessionId: string, url: string, thumbnailFilename: string, fullPageFilename?: string): void {
+	addScreenshot(sessionId: string, url: string, thumbnailUrl: string): void {
 		const session = this.sessions.get(sessionId);
 		if (session) {
-			session.screenshots.set(url, { thumbnailFilename, fullPageFilename });
+			session.screenshots.set(url, { thumbnailUrl });
 		}
 	}
 

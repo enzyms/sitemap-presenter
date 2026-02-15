@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import type { PageNode, LinkEdge, CrawlProgress, PageDiscoveredEvent, PageScreenshotEvent } from '$lib/types';
 import { applyLayout, reorganizeByUrlHierarchy, type LayoutMode } from '$lib/services/layoutEngine';
+import { layoutPositions } from '$lib/services/layoutPositions';
 import type { Edge } from '@xyflow/svelte';
 
 const defaultProgress: CrawlProgress = {
@@ -26,6 +27,11 @@ class SitemapStore {
 		(browser ? (localStorage.getItem(LAYOUT_MODE_STORAGE_KEY) as LayoutMode) : null) ||
 			'hierarchical'
 	);
+
+	// Layout lock/meta state
+	isLayoutLocked = $state(false);
+	layoutUpdatedBy = $state<string | null>(null);
+	layoutUpdatedAt = $state<string | null>(null);
 
 	// Internal state (not reactive)
 	private urlToNodeId = new Map<string, string>();
@@ -62,39 +68,46 @@ class SitemapStore {
 			positions[node.id] = node.position;
 		}
 
-		try {
-			const key = `${POSITIONS_STORAGE_KEY}-${this.currentSiteId}-${this.layoutMode}`;
-			localStorage.setItem(key, JSON.stringify(positions));
-		} catch (e) {
-			console.error('Failed to save node positions:', e);
-		}
+		layoutPositions.savePositions(this.currentSiteId, this.layoutMode, positions, this.layoutUpdatedBy);
 	}
 
-	private loadPositions(mode?: LayoutMode): Record<string, { x: number; y: number }> | null {
+	flushPositions() {
+		layoutPositions.flushPendingSave();
+	}
+
+	private loadPositionsSync(mode?: LayoutMode): Record<string, { x: number; y: number }> | null {
 		if (!browser || !this.currentSiteId) return null;
-
 		const targetMode = mode || this.layoutMode;
-		try {
-			const key = `${POSITIONS_STORAGE_KEY}-${this.currentSiteId}-${targetMode}`;
-			const saved = localStorage.getItem(key);
-			if (saved) {
-				return JSON.parse(saved);
-			}
-		} catch (e) {
-			console.error('Failed to load node positions:', e);
-		}
-		return null;
+		return layoutPositions.loadPositionsSync(this.currentSiteId, targetMode);
 	}
 
-	private clearSavedPositions() {
-		if (!browser || !this.currentSiteId) return;
+	/** Fetch positions from Supabase and apply to current nodes. */
+	async applySupabasePositions(): Promise<void> {
+		if (!this.currentSiteId) return;
+		const positions = await layoutPositions.loadPositions(this.currentSiteId, this.layoutMode);
+		if (!positions) return;
 
-		try {
-			const key = `${POSITIONS_STORAGE_KEY}-${this.currentSiteId}-${this.layoutMode}`;
-			localStorage.removeItem(key);
-		} catch (e) {
-			console.error('Failed to clear node positions:', e);
-		}
+		this.nodes = this.nodes.map((node) => {
+			if (positions[node.id]) {
+				this.manuallyPositioned.add(node.id);
+				return { ...node, position: positions[node.id] };
+			}
+			return node;
+		});
+	}
+
+	async loadLayoutMeta(): Promise<void> {
+		if (!this.currentSiteId) return;
+		const meta = await layoutPositions.getLayoutMeta(this.currentSiteId, this.layoutMode);
+		this.isLayoutLocked = meta.is_locked;
+		this.layoutUpdatedBy = meta.updated_by;
+		this.layoutUpdatedAt = meta.updated_at;
+	}
+
+	async toggleLayoutLock(): Promise<void> {
+		if (!this.currentSiteId) return;
+		const newLocked = await layoutPositions.toggleLock(this.currentSiteId, this.layoutMode);
+		this.isLayoutLocked = newLocked;
 	}
 
 	private clearAllSavedPositions() {
@@ -187,7 +200,6 @@ class SitemapStore {
 					data: {
 						...node.data,
 						thumbnailUrl: event.thumbnailUrl,
-						fullScreenshotUrl: event.fullScreenshotUrl,
 						screenshotStatus: 'ready' as const
 					}
 				};
@@ -234,7 +246,8 @@ class SitemapStore {
 			localStorage.setItem(LAYOUT_MODE_STORAGE_KEY, mode);
 		}
 
-		const savedPositions = this.loadPositions(mode);
+		// Synchronous localStorage load for instant render
+		const savedPositions = this.loadPositionsSync(mode);
 
 		if (savedPositions) {
 			this.nodes = this.nodes.map((node) => {
@@ -248,6 +261,9 @@ class SitemapStore {
 
 		this.layoutNodes();
 		this.savePositions();
+
+		// Load meta for new mode
+		this.loadLayoutMeta();
 	}
 
 	onNodeDragStart(nodeId: string) {
@@ -283,6 +299,11 @@ class SitemapStore {
 	}
 
 	onNodeDragStop(nodeId: string, position: { x: number; y: number }) {
+		if (this.isLayoutLocked) {
+			this._dragOrigin = null;
+			this._dragDescendants = null;
+			return;
+		}
 		// Apply final delta to all descendants
 		if (this._dragOrigin && this._dragDescendants) {
 			const dx = position.x - this._dragOrigin.x;
@@ -313,6 +334,11 @@ class SitemapStore {
 	}
 
 	onMultiNodeDragStop(movedNodes: Array<{ id: string; position: { x: number; y: number } }>) {
+		if (this.isLayoutLocked) {
+			this._dragOrigin = null;
+			this._dragDescendants = null;
+			return;
+		}
 		const posMap = new Map(movedNodes.map((n) => [n.id, n.position]));
 		this.nodes = this.nodes.map((n) => {
 			const newPos = posMap.get(n.id);
@@ -412,6 +438,9 @@ class SitemapStore {
 		this.urlToNodeId.clear();
 		this.manuallyPositioned.clear();
 		this.layoutMode = 'hierarchical';
+		this.isLayoutLocked = false;
+		this.layoutUpdatedBy = null;
+		this.layoutUpdatedAt = null;
 		this._dragOrigin = null;
 		this._dragDescendants = null;
 	}
@@ -442,7 +471,8 @@ class SitemapStore {
 			cachedEdges as Edge[]
 		);
 
-		const savedPositions = this.loadPositions(this.layoutMode);
+		// Use sync localStorage for instant render; async Supabase overwrite handled by caller
+		const savedPositions = this.loadPositionsSync(this.layoutMode);
 
 		const nodesWithPositions = reorganizedNodes.map((node) => {
 			if (savedPositions && savedPositions[node.id]) {

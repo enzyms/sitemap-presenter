@@ -1,10 +1,10 @@
 /**
  * IndexedDB-based screenshot cache
- * Stores screenshots locally to avoid re-crawling
+ * Stores thumbnails locally to avoid re-fetching
  */
 
 const DB_NAME = 'sitemap-presenter-screenshots';
-const DB_VERSION = 2; // Bumped version for schema change
+const DB_VERSION = 3; // Bumped version: removed fullPageBlob
 const STORE_NAME = 'screenshots';
 
 interface CachedScreenshot {
@@ -12,7 +12,6 @@ interface CachedScreenshot {
   url: string;
   siteId: string;
   thumbnailBlob: Blob;
-  fullPageBlob?: Blob;
   cachedAt: string;
 }
 
@@ -88,7 +87,7 @@ class ScreenshotCacheService {
     });
   }
 
-  async set(siteId: string, url: string, thumbnailBlob: Blob, fullPageBlob?: Blob): Promise<void> {
+  async set(siteId: string, url: string, thumbnailBlob: Blob): Promise<void> {
     await this.init();
     if (!this.db) return;
 
@@ -97,7 +96,6 @@ class ScreenshotCacheService {
       url,
       siteId,
       thumbnailBlob,
-      fullPageBlob,
       cachedAt: new Date().toISOString()
     };
 
@@ -166,21 +164,19 @@ class ScreenshotCacheService {
   }
 
   /**
-   * Fetch screenshot from server and cache it
+   * Fetch thumbnail from server and cache it
    */
   async fetchAndCache(
     pageUrl: string,
     siteId: string,
-    thumbnailUrl: string,
-    fullPageUrl?: string
-  ): Promise<{ thumbnailObjectUrl: string; fullPageObjectUrl?: string } | null> {
+    thumbnailUrl: string
+  ): Promise<{ thumbnailObjectUrl: string } | null> {
     try {
       // Check if already cached
       const cached = await this.get(siteId, pageUrl);
       if (cached) {
         return {
-          thumbnailObjectUrl: this.trackObjectUrl(URL.createObjectURL(cached.thumbnailBlob)),
-          fullPageObjectUrl: cached.fullPageBlob ? this.trackObjectUrl(URL.createObjectURL(cached.fullPageBlob)) : undefined
+          thumbnailObjectUrl: this.trackObjectUrl(URL.createObjectURL(cached.thumbnailBlob))
         };
       }
 
@@ -189,20 +185,11 @@ class ScreenshotCacheService {
       if (!thumbnailResponse.ok) return null;
       const thumbnailBlob = await thumbnailResponse.blob();
 
-      let fullPageBlob: Blob | undefined;
-      if (fullPageUrl) {
-        const fullPageResponse = await fetch(fullPageUrl);
-        if (fullPageResponse.ok) {
-          fullPageBlob = await fullPageResponse.blob();
-        }
-      }
-
       // Store in IndexedDB
-      await this.set(siteId, pageUrl, thumbnailBlob, fullPageBlob);
+      await this.set(siteId, pageUrl, thumbnailBlob);
 
       return {
-        thumbnailObjectUrl: this.trackObjectUrl(URL.createObjectURL(thumbnailBlob)),
-        fullPageObjectUrl: fullPageBlob ? this.trackObjectUrl(URL.createObjectURL(fullPageBlob)) : undefined
+        thumbnailObjectUrl: this.trackObjectUrl(URL.createObjectURL(thumbnailBlob))
       };
     } catch (error) {
       console.error('[ScreenshotCache] Failed to fetch and cache:', error);
@@ -213,13 +200,12 @@ class ScreenshotCacheService {
   /**
    * Get cached screenshot as object URL
    */
-  async getObjectUrl(siteId: string, pageUrl: string): Promise<{ thumbnailObjectUrl: string; fullPageObjectUrl?: string } | null> {
+  async getObjectUrl(siteId: string, pageUrl: string): Promise<{ thumbnailObjectUrl: string } | null> {
     const cached = await this.get(siteId, pageUrl);
     if (!cached) return null;
 
     return {
-      thumbnailObjectUrl: this.trackObjectUrl(URL.createObjectURL(cached.thumbnailBlob)),
-      fullPageObjectUrl: cached.fullPageBlob ? this.trackObjectUrl(URL.createObjectURL(cached.fullPageBlob)) : undefined
+      thumbnailObjectUrl: this.trackObjectUrl(URL.createObjectURL(cached.thumbnailBlob))
     };
   }
 

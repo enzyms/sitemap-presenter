@@ -5,6 +5,9 @@
 	import AppHeader from '$lib/components/ui/AppHeader.svelte';
 	import { getSupabase, type Site } from '$lib/services/supabase';
 	import { screenshotCache } from '$lib/services/screenshotCache';
+	import { layoutPositions } from '$lib/services/layoutPositions';
+	import { crawlCacheService } from '$lib/services/crawlCacheService';
+	import { apiService } from '$lib/services/api';
 
 	let siteId = $derived($page.params.id!);
 
@@ -99,18 +102,22 @@
 				throw new Error('Site not found or you do not have permission to delete it');
 			}
 
-			// Clear localStorage cache (sitemap data + node positions for both layout modes)
-			try {
-				localStorage.removeItem(`sitemap-cache-${siteId}`);
-				localStorage.removeItem(`sitemap-node-positions-${siteId}-hierarchical`);
-				localStorage.removeItem(`sitemap-node-positions-${siteId}-radial`);
-			} catch {}
+			// Clear crawl cache (localStorage + Supabase)
+			await crawlCacheService.deleteForSite(siteId);
 
-			// Clear IndexedDB screenshot cache
+			// Clear layout positions (localStorage + Supabase)
+			await layoutPositions.deleteLayoutsForSite(siteId);
+
+			// Delete screenshots from Supabase Storage + IndexedDB cache
 			try {
+				const cached = await screenshotCache.getAllForSite(siteId);
+				if (cached.length > 0) {
+					const pageUrls = cached.map((c) => c.url);
+					await apiService.deleteScreenshots(pageUrls);
+				}
 				await screenshotCache.deleteBySiteId(siteId);
 			} catch (e) {
-				console.error('Failed to clear screenshot cache:', e);
+				console.error('Failed to clear screenshots:', e);
 			}
 
 			// Redirect to homepage

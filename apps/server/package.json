@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "eslint src"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
     "bull": "^4.12.2",
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",

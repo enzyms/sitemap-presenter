@@ -46,8 +46,7 @@ class SocketService {
 					await screenshotCache.fetchAndCache(
 						data.url,
 						this.currentSiteId,
-						data.thumbnailUrl,
-						data.fullScreenshotUrl
+						data.thumbnailUrl
 					);
 				} catch (error) {
 					console.error('Failed to cache screenshot:', error);

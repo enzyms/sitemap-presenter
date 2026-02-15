@@ -3,18 +3,15 @@ class PageViewerStore {
 	pageUrl = $state<string | null>(null);
 	pageTitle = $state('');
 	screenshotUrl = $state<string | null>(null);
-	fullScreenshotUrl = $state<string | null>(null);
 
 	openViewer(
 		url: string,
 		title: string,
-		thumbnail: string | null,
-		fullScreenshot: string | null = null
+		thumbnail: string | null
 	) {
 		this.pageUrl = url;
 		this.pageTitle = title;
-		this.screenshotUrl = fullScreenshot || thumbnail;
-		this.fullScreenshotUrl = fullScreenshot;
+		this.screenshotUrl = thumbnail;
 		this.isOpen = true;
 	}
 

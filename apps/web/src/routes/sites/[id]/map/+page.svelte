@@ -9,9 +9,9 @@
 	import { feedbackStore } from '$lib/stores/feedback.svelte';
 	import { getSupabase, type Site } from '$lib/services/supabase';
 	import { screenshotCache } from '$lib/services/screenshotCache';
+	import { layoutPositions } from '$lib/services/layoutPositions';
+	import { crawlCacheService } from '$lib/services/crawlCacheService';
 	import type { PageNode, FeedbackStats } from '$lib/types';
-
-	const SITEMAP_CACHE_PREFIX = 'sitemap-cache-';
 
 	let siteId = $derived($page.params.id!);
 	let site = $state<Site | null>(null);
@@ -54,25 +54,30 @@
 		}
 	}
 
-	// Load cached sitemap from localStorage
+	// Load cached sitemap — tries Supabase first, falls back to localStorage
 	async function loadCachedSitemap() {
 		try {
 			// Clear any stale data from a previous site before loading
 			sitemapStore.reset();
 			sitemapStore.setSiteId(siteId);
 
-			const cached = localStorage.getItem(`${SITEMAP_CACHE_PREFIX}${siteId}`);
-			if (cached) {
-				const data = JSON.parse(cached);
-				if (data.nodes && data.edges) {
-					// Augment nodes with Supabase marker counts
-					let nodesWithFeedback = await loadSupabaseMarkerCounts(data.nodes);
+			// Load crawl data (Supabase-first, localStorage fallback)
+			const cached = await crawlCacheService.load(siteId);
 
-					// Restore screenshots from IndexedDB cache
-					nodesWithFeedback = await restoreScreenshotsFromCache(nodesWithFeedback);
+			if (cached && cached.nodes?.length > 0) {
+				// Augment nodes with Supabase marker counts
+				let nodesWithFeedback = await loadSupabaseMarkerCounts(cached.nodes);
 
-					sitemapStore.loadFromCache(nodesWithFeedback, data.edges);
-				}
+				// Restore screenshots from IndexedDB cache
+				nodesWithFeedback = await restoreScreenshotsFromCache(nodesWithFeedback);
+
+				sitemapStore.loadFromCache(nodesWithFeedback, cached.edges);
+
+				// Overwrite with Supabase positions (shared across browsers)
+				await sitemapStore.applySupabasePositions();
+
+				// Load layout meta (lock state, last editor)
+				await sitemapStore.loadLayoutMeta();
 			}
 		} catch (e) {
 			console.error('Failed to load cached sitemap:', e);
@@ -92,7 +97,6 @@
 						data: {
 							...node.data,
 							thumbnailUrl: cachedUrls.thumbnailObjectUrl,
-							fullScreenshotUrl: cachedUrls.fullPageObjectUrl,
 							screenshotStatus: 'ready' as const
 						}
 					});
@@ -108,15 +112,11 @@
 		return updatedNodes;
 	}
 
-	// Save sitemap to localStorage
+	// Save sitemap to localStorage + Supabase (debounced)
 	function saveSitemapCache() {
-		try {
-			const { nodes, edges } = sitemapStore.getCurrentData();
-			if (nodes.length > 0) {
-				localStorage.setItem(`${SITEMAP_CACHE_PREFIX}${siteId}`, JSON.stringify({ nodes, edges }));
-			}
-		} catch (e) {
-			console.error('Failed to save sitemap cache:', e);
+		const { nodes, edges } = sitemapStore.getCurrentData();
+		if (nodes.length > 0) {
+			crawlCacheService.save(siteId, { nodes, edges });
 		}
 	}
 
@@ -186,6 +186,11 @@
 		}
 	});
 
+	function handleBeforeUnload() {
+		layoutPositions.flushPendingSave();
+		crawlCacheService.flushPendingSave();
+	}
+
 	onMount(() => {
 		// Initialize screenshot cache and clear old entries
 		screenshotCache.init().then(() => {
@@ -194,7 +199,12 @@
 
 		loadSite();
 
+		window.addEventListener('beforeunload', handleBeforeUnload);
+
 		return () => {
+			window.removeEventListener('beforeunload', handleBeforeUnload);
+			layoutPositions.flushPendingSave();
+			crawlCacheService.flushPendingSave();
 			feedbackStore.destroy();
 			screenshotCache.revokeAll();
 			sitemapStore.reset();
