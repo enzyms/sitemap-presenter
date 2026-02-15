@@ -4,24 +4,21 @@
 	import AppHeader from '$lib/components/ui/AppHeader.svelte';
 	import SitemapCanvas from '$lib/components/canvas/SitemapCanvas.svelte';
 	import PageViewer from '$lib/components/viewer/PageViewer.svelte';
-	import { sitemapStore } from '$lib/stores/sitemap';
-	import { configStore } from '$lib/stores/config';
-	import { feedbackStore } from '$lib/stores/feedback';
+	import { sitemapStore } from '$lib/stores/sitemap.svelte';
+	import { configStore } from '$lib/stores/config.svelte';
+	import { feedbackStore } from '$lib/stores/feedback.svelte';
 	import { getSupabase, type Site } from '$lib/services/supabase';
 	import { screenshotCache } from '$lib/services/screenshotCache';
 	import type { PageNode, FeedbackStats } from '$lib/types';
 
 	const SITEMAP_CACHE_PREFIX = 'sitemap-cache-';
 
-	let siteId = $derived($page.params.id);
+	let siteId = $derived($page.params.id!);
 	let site = $state<Site | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
-	const nodes = sitemapStore.nodes;
-	const zoomLevel = sitemapStore.zoomLevel;
-
-	let hasNodes = $derived($nodes.length > 0);
+	let hasNodes = $derived(sitemapStore.nodes.length > 0);
 
 	// Load site from Supabase
 	async function loadSite() {
@@ -41,8 +38,7 @@
 
 			// Prefill config with site's domain
 			if (site?.domain) {
-				const url = site.domain.startsWith('http') ? site.domain : `https://${site.domain}`;
-				configStore.setUrl(url);
+				configStore.setUrl(site.domain.startsWith('http') ? site.domain : `https://${site.domain}`);
 			}
 
 			// Initialize feedback store for this site
@@ -61,7 +57,8 @@
 	// Load cached sitemap from localStorage
 	async function loadCachedSitemap() {
 		try {
-			// Set siteId first so positions can be loaded
+			// Clear any stale data from a previous site before loading
+			sitemapStore.reset();
 			sitemapStore.setSiteId(siteId);
 
 			const cached = localStorage.getItem(`${SITEMAP_CACHE_PREFIX}${siteId}`);
@@ -184,7 +181,7 @@
 
 	// Save cache when nodes change
 	$effect(() => {
-		if ($nodes.length > 0 && site) {
+		if (sitemapStore.nodes.length > 0 && site) {
 			saveSitemapCache();
 		}
 	});
@@ -192,17 +189,15 @@
 	onMount(() => {
 		// Initialize screenshot cache and clear old entries
 		screenshotCache.init().then(() => {
-			screenshotCache.clearOldCache(7).then((deleted) => {
-				if (deleted > 0) {
-					console.log(`Cleared ${deleted} old cached screenshots`);
-				}
-			});
+			screenshotCache.clearOldCache(7);
 		});
 
 		loadSite();
 
 		return () => {
 			feedbackStore.destroy();
+			screenshotCache.revokeAll();
+			sitemapStore.reset();
 		};
 	});
 </script>
@@ -240,7 +235,7 @@
 			{#if hasNodes}
 				<div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
 					<div class="bg-white/80 backdrop-blur px-3 py-1 rounded-full shadow text-sm text-gray-600">
-						Zoom: {Math.round($zoomLevel * 100)}%
+						Zoom: {Math.round(sitemapStore.zoomLevel * 100)}%
 					</div>
 				</div>
 			{/if}

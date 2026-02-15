@@ -1,8 +1,8 @@
-import { io, Socket } from 'socket.io-client';
-import { sitemapStore } from '$lib/stores/sitemap';
-import { projectsStore } from '$lib/stores/projects';
+import { io } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
+import { sitemapStore } from '$lib/stores/sitemap.svelte';
+import { projectsStore } from '$lib/stores/projects.svelte';
 import { screenshotCache } from '$lib/services/screenshotCache';
-import { get } from 'svelte/store';
 import type {
 	PageDiscoveredEvent,
 	PageScreenshotEvent,
@@ -29,23 +29,15 @@ class SocketService {
 		});
 
 		this.socket.on('connect', () => {
-			console.log('WebSocket connected');
 			this.socket?.emit('join:session', sessionId);
 		});
 
-		this.socket.on('disconnect', () => {
-			console.log('WebSocket disconnected');
-		});
-
 		this.socket.on('page:discovered', (data: PageDiscoveredEvent) => {
-			console.log('Page discovered:', data.url);
 			sitemapStore.addPage(data);
-			// Trigger layout update after each new page
 			sitemapStore.layoutNodes();
 		});
 
 		this.socket.on('page:screenshot', async (data: PageScreenshotEvent) => {
-			console.log('Screenshot ready:', data.url);
 			sitemapStore.updateScreenshot(data);
 
 			// Cache screenshots to IndexedDB for offline use
@@ -57,7 +49,6 @@ class SocketService {
 						data.thumbnailUrl,
 						data.fullScreenshotUrl
 					);
-					console.log('Screenshot cached:', data.url);
 				} catch (error) {
 					console.error('Failed to cache screenshot:', error);
 				}
@@ -65,37 +56,32 @@ class SocketService {
 		});
 
 		this.socket.on('crawl:progress', (data: CrawlProgressEvent) => {
-			sitemapStore.progress.update((p) => ({
-				...p,
+			sitemapStore.updateProgress({
 				found: data.found,
 				crawled: data.crawled,
 				screenshotted: data.screenshotted
-			}));
+			});
 		});
 
 		this.socket.on('crawl:complete', (data: CrawlCompleteEvent) => {
-			console.log('Crawl complete:', data);
 			sitemapStore.setStatus('complete');
 
 			// Apply URL path hierarchy to reorganize nodes/edges
 			sitemapStore.applyUrlHierarchy();
-			console.log('Applied URL hierarchy');
 
 			// Save to current project cache if a project is selected
-			const currentProjectId = get(projectsStore.currentProjectId);
+			const currentProjectId = projectsStore.currentProjectId;
 			if (currentProjectId) {
 				const { nodes, edges } = sitemapStore.getCurrentData();
 				projectsStore.cacheProjectData(currentProjectId, nodes, edges);
-				console.log('Saved crawl data to project cache:', currentProjectId);
 			}
 		});
 
 		this.socket.on('crawl:error', (data: CrawlErrorEvent) => {
 			console.error('Crawl error:', data);
-			sitemapStore.progress.update((p) => ({
-				...p,
-				errors: p.errors + 1
-			}));
+			sitemapStore.updateProgress({
+				errors: sitemapStore.progress.errors + 1
+			});
 		});
 	}
 

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { projectsStore } from '$lib/stores/projects';
-	import { sitemapStore } from '$lib/stores/sitemap';
-	import { configStore } from '$lib/stores/config';
+	import { projectsStore } from '$lib/stores/projects.svelte';
+	import { sitemapStore } from '$lib/stores/sitemap.svelte';
+	import { configStore } from '$lib/stores/config.svelte';
 
 	interface Props {
 		showDashboard: boolean;
@@ -13,9 +13,6 @@
 	let newProjectName = $state('');
 	let newProjectDescription = $state('');
 	let newProjectUrl = $state('');
-
-	const projects = projectsStore.projects;
-	const currentProjectId = projectsStore.currentProjectId;
 
 	function createProject() {
 		if (!newProjectName.trim() || !newProjectUrl.trim()) return;
@@ -178,7 +175,7 @@
 				{/if}
 
 				<!-- Projects list -->
-				{#if $projects.length === 0}
+				{#if projectsStore.projects.length === 0}
 					<div class="text-center py-12 text-gray-400">
 						<svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
@@ -192,11 +189,11 @@
 					</div>
 				{:else}
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						{#each $projects as project (project.id)}
+						{#each projectsStore.projects as project (project.id)}
 							<div
 								class="bg-white border-2 rounded-lg p-4 hover:shadow-md transition-shadow relative"
-								class:border-blue-500={$currentProjectId === project.id}
-								class:border-gray-200={$currentProjectId !== project.id}
+								class:border-blue-500={projectsStore.currentProjectId === project.id}
+								class:border-gray-200={projectsStore.currentProjectId !== project.id}
 							>
 								<button
 									onclick={() => selectProject(project.id)}
@@ -239,7 +236,7 @@
 										{/if}
 									</div>
 
-									{#if $currentProjectId === project.id}
+									{#if projectsStore.currentProjectId === project.id}
 										<div class="mt-3 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded text-center">
 											Currently Active
 										</div>

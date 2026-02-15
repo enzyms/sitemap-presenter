@@ -6,7 +6,7 @@
 	import { getSupabase, type Site } from '$lib/services/supabase';
 	import { screenshotCache } from '$lib/services/screenshotCache';
 
-	let siteId = $derived($page.params.id);
+	let siteId = $derived($page.params.id!);
 
 	let site = $state<Site | null>(null);
 	let loading = $state(true);
@@ -99,9 +99,11 @@
 				throw new Error('Site not found or you do not have permission to delete it');
 			}
 
-			// Clear localStorage cache
+			// Clear localStorage cache (sitemap data + node positions for both layout modes)
 			try {
 				localStorage.removeItem(`sitemap-cache-${siteId}`);
+				localStorage.removeItem(`sitemap-node-positions-${siteId}-hierarchical`);
+				localStorage.removeItem(`sitemap-node-positions-${siteId}-radial`);
 			} catch {}
 
 			// Clear IndexedDB screenshot cache

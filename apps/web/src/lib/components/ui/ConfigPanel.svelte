@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { configStore } from '$lib/stores/config';
-	import { sitemapStore } from '$lib/stores/sitemap';
-	import { projectsStore } from '$lib/stores/projects';
+	import { configStore } from '$lib/stores/config.svelte';
+	import { sitemapStore } from '$lib/stores/sitemap.svelte';
+	import { projectsStore } from '$lib/stores/projects.svelte';
 	import { apiService } from '$lib/services/api';
 	import { socketService } from '$lib/services/socket';
 
@@ -11,10 +11,6 @@
 	}
 
 	let { onClose, siteId }: Props = $props();
-
-	const config = configStore;
-	const progress = sitemapStore.progress;
-	const currentProjectId = projectsStore.currentProjectId;
 
 	let isLoading = $state(false);
 	let error = $state('');
@@ -40,7 +36,7 @@
 
 		// Validate URL
 		try {
-			new URL($config.url);
+			new URL(configStore.url);
 		} catch {
 			error = 'Please enter a valid URL';
 			return;
@@ -50,7 +46,7 @@
 		sitemapStore.reset();
 
 		try {
-			const response = await apiService.startCrawl($config);
+			const response = await apiService.startCrawl(configStore.current);
 			sitemapStore.setSessionId(response.sessionId);
 			sitemapStore.setStatus('crawling');
 			socketService.connect(response.sessionId, siteId);
@@ -63,9 +59,9 @@
 	}
 
 	async function handleCancel() {
-		if ($progress.sessionId) {
+		if (sitemapStore.progress.sessionId) {
 			try {
-				await apiService.cancelCrawl($progress.sessionId);
+				await apiService.cancelCrawl(sitemapStore.progress.sessionId);
 				socketService.disconnect();
 				sitemapStore.setStatus('idle');
 			} catch (err) {
@@ -75,16 +71,16 @@
 	}
 
 	function loadCachedData() {
-		if ($currentProjectId) {
-			const cachedData = projectsStore.getCachedData($currentProjectId);
+		if (projectsStore.currentProjectId) {
+			const cachedData = projectsStore.getCachedData(projectsStore.currentProjectId);
 			if (cachedData) {
 				sitemapStore.loadFromCache(cachedData.nodes, cachedData.edges);
 			}
 		}
 	}
 
-	let isCrawling = $derived($progress.status === 'crawling' || $progress.status === 'screenshotting');
-	let currentProject = $derived($currentProjectId ? projectsStore.getProject($currentProjectId) : null);
+	let isCrawling = $derived(sitemapStore.progress.status === 'crawling' || sitemapStore.progress.status === 'screenshotting');
+	let currentProject = $derived(projectsStore.currentProjectId ? projectsStore.getProject(projectsStore.currentProjectId) : null);
 	let hasCachedData = $derived(currentProject?.cachedData ? true : false);
 </script>
 
@@ -139,7 +135,7 @@
 				<input
 					type="url"
 					id="url"
-					value={$config.url}
+					value={configStore.url}
 					oninput={handleUrlChange}
 					placeholder="https://example.com"
 					class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -151,12 +147,12 @@
 			<!-- Max Depth -->
 			<div>
 				<label for="maxDepth" class="block text-sm font-medium text-gray-700 mb-1">
-					Max Depth: {$config.maxDepth}
+					Max Depth: {configStore.maxDepth}
 				</label>
 				<input
 					type="range"
 					id="maxDepth"
-					value={$config.maxDepth}
+					value={configStore.maxDepth}
 					oninput={handleMaxDepthChange}
 					min="1"
 					max="5"
@@ -175,12 +171,12 @@
 			<!-- Max Pages -->
 			<div>
 				<label for="maxPages" class="block text-sm font-medium text-gray-700 mb-1">
-					Max Pages: {$config.maxPages}
+					Max Pages: {configStore.maxPages}
 				</label>
 				<input
 					type="range"
 					id="maxPages"
-					value={$config.maxPages}
+					value={configStore.maxPages}
 					oninput={handleMaxPagesChange}
 					min="3"
 					max="500"
@@ -216,7 +212,7 @@
 				{:else}
 					<button
 						type="submit"
-						disabled={isLoading || !$config.url}
+						disabled={isLoading || !configStore.url}
 						class="flex-1 px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 					>
 						{#if isLoading}

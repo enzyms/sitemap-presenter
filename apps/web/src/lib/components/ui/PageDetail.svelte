@@ -1,32 +1,30 @@
 <script lang="ts">
-	import { sitemapStore } from '$lib/stores/sitemap';
-	import { pageViewerStore } from '$lib/stores/pageViewer';
-
-	const selectedNode = sitemapStore.selectedNode;
+	import { sitemapStore } from '$lib/stores/sitemap.svelte';
+	import { pageViewerStore } from '$lib/stores/pageViewer.svelte';
 
 	function handleClose() {
 		sitemapStore.selectNode(null);
 	}
 
 	function handleOpenUrl() {
-		if ($selectedNode?.data.url) {
-			window.open($selectedNode.data.url, '_blank');
+		if (sitemapStore.selectedNode?.data.url) {
+			window.open(sitemapStore.selectedNode.data.url, '_blank');
 		}
 	}
 
 	function handleOpenViewer() {
-		if ($selectedNode) {
+		if (sitemapStore.selectedNode) {
 			pageViewerStore.openViewer(
-				$selectedNode.data.url,
-				$selectedNode.data.title,
-				$selectedNode.data.thumbnailUrl || null,
-				$selectedNode.data.fullScreenshotUrl || null
+				sitemapStore.selectedNode.data.url,
+				sitemapStore.selectedNode.data.title,
+				sitemapStore.selectedNode.data.thumbnailUrl || null,
+				sitemapStore.selectedNode.data.fullScreenshotUrl || null
 			);
 		}
 	}
 </script>
 
-{#if $selectedNode}
+{#if sitemapStore.selectedNode}
 	<div class="bg-white rounded-lg shadow-lg w-80 max-h-[calc(100vh-200px)] flex flex-col">
 		<!-- Header -->
 		<div class="flex items-center justify-between p-4 border-b">
@@ -45,11 +43,11 @@
 		<!-- Content -->
 		<div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
 			<!-- Screenshot preview -->
-			{#if $selectedNode.data.thumbnailUrl}
+			{#if sitemapStore.selectedNode.data.thumbnailUrl}
 				<div class="rounded-md overflow-hidden border">
 					<img
-						src={$selectedNode.data.thumbnailUrl}
-						alt={$selectedNode.data.title}
+						src={sitemapStore.selectedNode.data.thumbnailUrl}
+						alt={sitemapStore.selectedNode.data.title}
 						class="w-full h-auto"
 					/>
 				</div>
@@ -58,19 +56,19 @@
 			<!-- Title -->
 			<div>
 				<span class="block text-xs text-gray-500 mb-1">Title</span>
-				<p class="text-sm font-medium text-gray-800">{$selectedNode.data.title}</p>
+				<p class="text-sm font-medium text-gray-800">{sitemapStore.selectedNode.data.title}</p>
 			</div>
 
 			<!-- URL -->
 			<div>
 				<span class="block text-xs text-gray-500 mb-1">URL</span>
 				<a
-					href={$selectedNode.data.url}
+					href={sitemapStore.selectedNode.data.url}
 					target="_blank"
 					rel="noopener noreferrer"
 					class="text-sm text-blue-600 hover:underline break-all"
 				>
-					{$selectedNode.data.url}
+					{sitemapStore.selectedNode.data.url}
 				</a>
 			</div>
 
@@ -78,7 +76,7 @@
 			<div>
 				<span class="block text-xs text-gray-500 mb-1">Depth Level</span>
 				<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-					Level {$selectedNode.data.depth}
+					Level {sitemapStore.selectedNode.data.depth}
 				</span>
 			</div>
 
@@ -87,16 +85,16 @@
 				<span class="block text-xs text-gray-500 mb-1">Screenshot Status</span>
 				<span
 					class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
-					class:bg-green-100={$selectedNode.data.screenshotStatus === 'ready'}
-					class:text-green-800={$selectedNode.data.screenshotStatus === 'ready'}
-					class:bg-yellow-100={$selectedNode.data.screenshotStatus === 'processing'}
-					class:text-yellow-800={$selectedNode.data.screenshotStatus === 'processing'}
-					class:bg-gray-100={$selectedNode.data.screenshotStatus === 'pending'}
-					class:text-gray-800={$selectedNode.data.screenshotStatus === 'pending'}
-					class:bg-red-100={$selectedNode.data.screenshotStatus === 'error'}
-					class:text-red-800={$selectedNode.data.screenshotStatus === 'error'}
+					class:bg-green-100={sitemapStore.selectedNode.data.screenshotStatus === 'ready'}
+					class:text-green-800={sitemapStore.selectedNode.data.screenshotStatus === 'ready'}
+					class:bg-yellow-100={sitemapStore.selectedNode.data.screenshotStatus === 'processing'}
+					class:text-yellow-800={sitemapStore.selectedNode.data.screenshotStatus === 'processing'}
+					class:bg-gray-100={sitemapStore.selectedNode.data.screenshotStatus === 'pending'}
+					class:text-gray-800={sitemapStore.selectedNode.data.screenshotStatus === 'pending'}
+					class:bg-red-100={sitemapStore.selectedNode.data.screenshotStatus === 'error'}
+					class:text-red-800={sitemapStore.selectedNode.data.screenshotStatus === 'error'}
 				>
-					{$selectedNode.data.screenshotStatus}
+					{sitemapStore.selectedNode.data.screenshotStatus}
 				</span>
 			</div>
 
@@ -105,23 +103,23 @@
 				<div class="bg-gray-50 rounded-md p-3">
 					<p class="text-xs text-gray-500">Internal Links</p>
 					<p class="text-lg font-semibold text-blue-600">
-						{$selectedNode.data.internalLinks.length}
+						{sitemapStore.selectedNode.data.internalLinks.length}
 					</p>
 				</div>
 				<div class="bg-gray-50 rounded-md p-3">
 					<p class="text-xs text-gray-500">External Links</p>
 					<p class="text-lg font-semibold text-purple-600">
-						{$selectedNode.data.externalLinks.length}
+						{sitemapStore.selectedNode.data.externalLinks.length}
 					</p>
 				</div>
 			</div>
 
 			<!-- Internal links list -->
-			{#if $selectedNode.data.internalLinks.length > 0}
+			{#if sitemapStore.selectedNode.data.internalLinks.length > 0}
 				<div>
 					<span class="block text-xs text-gray-500 mb-2">Internal Links</span>
 					<div class="max-h-40 overflow-y-auto custom-scrollbar space-y-1">
-						{#each $selectedNode.data.internalLinks.slice(0, 10) as link}
+						{#each sitemapStore.selectedNode.data.internalLinks.slice(0, 10) as link}
 							<a
 								href={link}
 								target="_blank"
@@ -131,9 +129,9 @@
 								{link}
 							</a>
 						{/each}
-						{#if $selectedNode.data.internalLinks.length > 10}
+						{#if sitemapStore.selectedNode.data.internalLinks.length > 10}
 							<p class="text-xs text-gray-500">
-								... and {$selectedNode.data.internalLinks.length - 10} more
+								... and {sitemapStore.selectedNode.data.internalLinks.length - 10} more
 							</p>
 						{/if}
 					</div>

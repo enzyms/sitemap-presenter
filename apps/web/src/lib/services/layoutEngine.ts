@@ -54,7 +54,7 @@ function getEdgePosition(node: Node, intersectionPoint: { x: number; y: number }
 	return Position.Top;
 }
 
-// Get all params needed for floating edge rendering
+// Get all params needed for dynamic floating edge rendering (slides along boundary)
 export function getEdgeParams(source: Node, target: Node) {
 	const sourceIntersectionPoint = getNodeIntersection(source, target);
 	const targetIntersectionPoint = getNodeIntersection(target, source);
@@ -70,6 +70,60 @@ export function getEdgeParams(source: Node, target: Node) {
 		sourcePos,
 		targetPos
 	};
+}
+
+// Get center point of a node
+function getNodeCenter(node: Node) {
+	return {
+		x: node.position.x + (node.measured?.width ?? NODE_WIDTH) / 2,
+		y: node.position.y + (node.measured?.height ?? NODE_HEIGHT) / 2
+	};
+}
+
+// Get the cardinal point (center of side) for a given position
+function getCardinalPoint(node: Node, position: Position): [number, number] {
+	const w = node.measured?.width ?? NODE_WIDTH;
+	const h = node.measured?.height ?? NODE_HEIGHT;
+	const x = node.position.x;
+	const y = node.position.y;
+
+	switch (position) {
+		case Position.Top:
+			return [x + w / 2, y];
+		case Position.Bottom:
+			return [x + w / 2, y + h];
+		case Position.Left:
+			return [x, y + h / 2];
+		case Position.Right:
+			return [x + w, y + h / 2];
+	}
+}
+
+// Get params for simple floating edges (snaps to cardinal points, no sliding)
+// Child (target) always connects from Top or Bottom only.
+// Parent (source) uses nearest cardinal side facing the child.
+export function getSimpleEdgeParams(source: Node, target: Node) {
+	const sourceCenter = getNodeCenter(source);
+	const targetCenter = getNodeCenter(target);
+
+	const dx = targetCenter.x - sourceCenter.x;
+	const dy = targetCenter.y - sourceCenter.y;
+
+	// Child: north if below parent, south if above
+	const targetPos = dy >= 0 ? Position.Top : Position.Bottom;
+
+	// Parent: nearest cardinal side facing the child
+	let sourcePos: Position;
+	if (Math.abs(dy) >= Math.abs(dx)) {
+		sourcePos = dy >= 0 ? Position.Bottom : Position.Top;
+	} else {
+		sourcePos = dx >= 0 ? Position.Right : Position.Left;
+	}
+
+	const [sx, sy] = getCardinalPoint(source, sourcePos);
+	const [tx, ty] = getCardinalPoint(target, targetPos);
+
+	return { sx, sy, tx, ty, sourcePos, targetPos };
 }
 
 // ============================================================
@@ -237,113 +291,124 @@ function layoutHierarchical(nodes: PageNode[], edges: Edge[]): PageNode[] {
 	});
 }
 
-// Radial layout with children positioned close to their parents
+// Count all visible descendants of a node (used for angular space allocation)
+function countDescendants(
+	nodeId: string,
+	childrenMap: Map<string, string[]>,
+	visibleIds: Set<string>
+): number {
+	const children = (childrenMap.get(nodeId) || []).filter((id) => visibleIds.has(id));
+	if (children.length === 0) return 1; // leaf counts as 1
+	let total = 0;
+	for (const child of children) {
+		total += countDescendants(child, childrenMap, visibleIds);
+	}
+	return total;
+}
+
+// Radial layout: concentric circles by depth, children clustered near parent
+// Ring radius grows dynamically so nodes never overlap.
 function layoutRadial(nodes: PageNode[], edges: Edge[]): PageNode[] {
 	const visibleNodes = nodes.filter((n) => !n.hidden);
 	if (visibleNodes.length === 0) return nodes;
 
+	const visibleIds = new Set(visibleNodes.map((n) => n.id));
 	const centerX = 0;
 	const centerY = 0;
 
-	// Build parent-children relationships
-	const childrenByParent = new Map<string, string[]>();
-	edges.forEach((edge) => {
-		const children = childrenByParent.get(edge.source) || [];
+	// Build parent → children map (only visible edges)
+	const childrenMap = new Map<string, string[]>();
+	for (const edge of edges) {
+		if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) continue;
+		const children = childrenMap.get(edge.source) || [];
 		children.push(edge.target);
-		childrenByParent.set(edge.source, children);
-	});
-
-	// Group visible nodes by depth
-	const byDepth = new Map<number, PageNode[]>();
-	visibleNodes.forEach((node) => {
-		const depth = node.data.depth;
-		if (!byDepth.has(depth)) byDepth.set(depth, []);
-		byDepth.get(depth)!.push(node);
-	});
-
-	// Calculate dynamic radius based on nodes at each level
-	const maxDepth = Math.max(...byDepth.keys());
-	const positions = new Map<string, { x: number; y: number }>();
-
-	// Position root node at center
-	const rootNodes = byDepth.get(0) || [];
-	if (rootNodes.length > 0) {
-		positions.set(rootNodes[0].id, { x: centerX, y: centerY });
+		childrenMap.set(edge.source, children);
 	}
 
-	// For each depth level, position nodes
-	for (let depth = 1; depth <= maxDepth; depth++) {
-		const nodesAtDepth = byDepth.get(depth) || [];
-		if (nodesAtDepth.length === 0) continue;
+	// Find root(s) — nodes at depth 0
+	const rootNodes = visibleNodes.filter((n) => n.data.depth === 0);
+	if (rootNodes.length === 0) return nodes;
 
-		// Calculate radius based on number of nodes (minimum circumference to avoid overlap)
-		const minSpacing = NODE_WIDTH + 100; // Minimum space between node centers
-		const circumference = Math.max(nodesAtDepth.length * minSpacing, 800);
-		const radius = circumference / (2 * Math.PI);
+	// Count nodes at each depth
+	const byDepth = new Map<number, PageNode[]>();
+	for (const node of visibleNodes) {
+		const d = node.data.depth;
+		if (!byDepth.has(d)) byDepth.set(d, []);
+		byDepth.get(d)!.push(node);
+	}
+	const maxDepth = Math.max(...byDepth.keys());
 
-		// Group nodes by their parent for positioning
-		const nodesByParent = new Map<string, PageNode[]>();
-		nodesAtDepth.forEach((node) => {
-			// Find the parent at depth-1
-			const parentEdge = edges.find((e) => e.target === node.id);
-			const parentId = parentEdge?.source || 'root';
-			if (!nodesByParent.has(parentId)) nodesByParent.set(parentId, []);
-			nodesByParent.get(parentId)!.push(node);
-		});
+	// Calculate radius for each ring:
+	// - Must fit all nodes at that depth without overlap
+	// - Must be larger than the previous ring by at least MIN_RING_GAP
+	const MIN_RING_GAP = NODE_HEIGHT + 150;
+	const NODE_ARC_SPACE = Math.sqrt(NODE_WIDTH * NODE_WIDTH + NODE_HEIGHT * NODE_HEIGHT) + 60;
+	const ringRadius = new Map<number, number>();
+	ringRadius.set(0, 0); // root at center
 
-		// Get parent positions and angles
-		const parentPositions: Array<{ id: string; angle: number; children: PageNode[] }> = [];
-		const parentNodesAtPrevDepth = byDepth.get(depth - 1) || [];
+	for (let d = 1; d <= maxDepth; d++) {
+		const count = (byDepth.get(d) || []).length;
+		// Minimum radius so nodes don't overlap: circumference >= count * spacing
+		const radiusForFit = (count * NODE_ARC_SPACE) / (2 * Math.PI);
+		// Must be at least MIN_RING_GAP larger than previous ring
+		const radiusForGap = (ringRadius.get(d - 1) || 0) + MIN_RING_GAP;
+		ringRadius.set(d, Math.max(radiusForFit, radiusForGap));
+	}
 
-		nodesByParent.forEach((children, parentId) => {
-			const parentPos = positions.get(parentId);
-			if (parentPos) {
-				// Calculate angle of parent from center
-				const angle = Math.atan2(parentPos.y - centerY, parentPos.x - centerX);
-				parentPositions.push({ id: parentId, angle, children });
-			} else if (parentId === 'root') {
-				// Orphan nodes - distribute evenly
-				parentPositions.push({ id: parentId, angle: 0, children });
-			}
-		});
+	const positions = new Map<string, { x: number; y: number }>();
 
-		// Sort by parent angle to keep children near parents
-		parentPositions.sort((a, b) => a.angle - b.angle);
+	// Place root at center
+	positions.set(rootNodes[0].id, { x: centerX, y: centerY });
 
-		// Calculate total children and distribute angles
-		const totalChildren = nodesAtDepth.length;
-		let currentIndex = 0;
+	// Recursive placement: each node gets an angular range, children share it
+	function placeChildren(
+		parentId: string,
+		startAngle: number,
+		endAngle: number,
+		depth: number
+	) {
+		const children = (childrenMap.get(parentId) || []).filter((id) => visibleIds.has(id));
+		if (children.length === 0) return;
 
-		parentPositions.forEach(({ id: parentId, angle: parentAngle, children }) => {
-			const parentPos = positions.get(parentId);
+		const radius = ringRadius.get(depth) || depth * MIN_RING_GAP;
 
-			if (parentPos && parentId !== 'root') {
-				// Position children in an arc centered on parent's angle
-				const arcSpan = (children.length / totalChildren) * 2 * Math.PI;
-				const startAngle = parentAngle - arcSpan / 2;
+		// Weight each child by its descendant count for proportional spacing
+		const weights = children.map((id) => countDescendants(id, childrenMap, visibleIds));
+		const totalWeight = weights.reduce((a, b) => a + b, 0);
 
-				children.forEach((node, i) => {
-					const nodeAngle =
-						children.length === 1
-							? parentAngle
-							: startAngle + (arcSpan * i) / (children.length - 1 || 1);
+		let currentAngle = startAngle;
 
-					positions.set(node.id, {
-						x: centerX + radius * Math.cos(nodeAngle),
-						y: centerY + radius * Math.sin(nodeAngle)
-					});
-				});
-			} else {
-				// Orphan nodes - distribute in remaining space
-				children.forEach((node, i) => {
-					const nodeAngle = (2 * Math.PI * (currentIndex + i)) / totalChildren - Math.PI / 2;
-					positions.set(node.id, {
-						x: centerX + radius * Math.cos(nodeAngle),
-						y: centerY + radius * Math.sin(nodeAngle)
-					});
-				});
-			}
-			currentIndex += children.length;
+		for (let i = 0; i < children.length; i++) {
+			const childId = children[i];
+			const share = ((endAngle - startAngle) * weights[i]) / totalWeight;
+			const childAngle = currentAngle + share / 2;
+
+			positions.set(childId, {
+				x: centerX + radius * Math.cos(childAngle),
+				y: centerY + radius * Math.sin(childAngle)
+			});
+
+			// Recurse: this child's subtree gets the slice [currentAngle, currentAngle + share]
+			placeChildren(childId, currentAngle, currentAngle + share, depth + 1);
+
+			currentAngle += share;
+		}
+	}
+
+	// Start: root's children get the full circle
+	placeChildren(rootNodes[0].id, -Math.PI, Math.PI, 1);
+
+	// Handle orphan nodes (no parent edge, not root) — distribute on outermost ring
+	const placed = new Set(positions.keys());
+	const orphans = visibleNodes.filter((n) => !placed.has(n.id));
+	if (orphans.length > 0) {
+		const outerRadius = (ringRadius.get(maxDepth) || MIN_RING_GAP) + MIN_RING_GAP;
+		orphans.forEach((node, i) => {
+			const angle = (2 * Math.PI * i) / orphans.length - Math.PI / 2;
+			positions.set(node.id, {
+				x: centerX + outerRadius * Math.cos(angle),
+				y: centerY + outerRadius * Math.sin(angle)
+			});
 		});
 	}
 

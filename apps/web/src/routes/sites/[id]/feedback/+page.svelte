@@ -2,17 +2,11 @@
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
 	import AppHeader from '$lib/components/ui/AppHeader.svelte';
-	import { feedbackStore } from '$lib/stores/feedback';
+	import { feedbackStore } from '$lib/stores/feedback.svelte';
+	import { formatDateTime } from '$lib/utils/formatDate';
 	import type { MarkerWithComments, MarkerStatus } from '$lib/services/supabase';
 
-	let siteId = $derived($page.params.id);
-
-	const site = feedbackStore.site;
-	const markers = feedbackStore.markers;
-	const loading = feedbackStore.loading;
-	const error = feedbackStore.error;
-	const openCount = feedbackStore.openCount;
-	const resolvedCount = feedbackStore.resolvedCount;
+	let siteId = $derived($page.params.id!);
 
 	let statusFilter = $state<'all' | 'open' | 'resolved'>('all');
 	let pageFilter = $state<string | null>(null);
@@ -22,7 +16,7 @@
 	// Grouped markers by page path
 	let groupedByPage = $derived.by(() => {
 		const filtered =
-			statusFilter === 'all' ? $markers : $markers.filter((m) => m.status === statusFilter);
+			statusFilter === 'all' ? feedbackStore.markers : feedbackStore.markers.filter((m) => m.status === statusFilter);
 
 		const groups: Record<string, MarkerWithComments[]> = {};
 		for (const marker of filtered) {
@@ -35,20 +29,11 @@
 		return groups;
 	});
 
-	let uniquePages = $derived([...new Set($markers.map((m) => m.page_path))].sort());
+	let uniquePages = $derived([...new Set(feedbackStore.markers.map((m) => m.page_path))].sort());
 
 	let filteredCount = $derived(
 		Object.values(groupedByPage).reduce((sum, arr) => sum + arr.length, 0)
 	);
-
-	function formatDate(dateStr: string): string {
-		return new Date(dateStr).toLocaleDateString('en-US', {
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
 
 	async function handleStatusChange(markerId: string, status: MarkerStatus): Promise<void> {
 		await feedbackStore.updateMarkerStatus(markerId, status);
@@ -74,7 +59,6 @@
 	}
 
 	onMount(async () => {
-		const siteId = $page.params.id;
 		await feedbackStore.initializeBySiteId(siteId);
 	});
 
@@ -84,32 +68,32 @@
 </script>
 
 <svelte:head>
-	<title>{$site?.name || 'Loading...'} - Feedback</title>
+	<title>{feedbackStore.site?.name || 'Loading...'} - Feedback</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-100 flex flex-col">
-	<AppHeader siteName={$site?.name} {siteId} showNewSite={false} />
+	<AppHeader siteName={feedbackStore.site?.name} {siteId} showNewSite={false} />
 
 	<!-- Stats bar -->
 	<div class="bg-white border-b border-gray-200 px-6 py-3">
 		<div class="max-w-6xl mx-auto flex items-center gap-6">
-			{#if $loading}
+			{#if feedbackStore.loading}
 				<div class="h-6 w-32 bg-gray-200 animate-pulse rounded"></div>
 			{:else}
 				<div class="flex items-center gap-2">
-					<span class="text-xl font-bold text-gray-800">{$markers.length}</span>
+					<span class="text-xl font-bold text-gray-800">{feedbackStore.markers.length}</span>
 					<span class="text-gray-500">total markers</span>
 				</div>
-				{#if $openCount > 0}
+				{#if feedbackStore.openCount > 0}
 					<div class="flex items-center gap-2">
 						<span class="w-3 h-3 bg-orange-500 rounded-full"></span>
-						<span class="text-gray-700 font-medium">{$openCount} open</span>
+						<span class="text-gray-700 font-medium">{feedbackStore.openCount} open</span>
 					</div>
 				{/if}
-				{#if $resolvedCount > 0}
+				{#if feedbackStore.resolvedCount > 0}
 					<div class="flex items-center gap-2">
 						<span class="w-3 h-3 bg-green-500 rounded-full"></span>
-						<span class="text-gray-700 font-medium">{$resolvedCount} resolved</span>
+						<span class="text-gray-700 font-medium">{feedbackStore.resolvedCount} resolved</span>
 					</div>
 				{/if}
 			{/if}
@@ -118,13 +102,13 @@
 
 	<!-- Main content -->
 	<main class="max-w-6xl mx-auto px-6 py-8">
-		{#if $error}
+		{#if feedbackStore.error}
 			<div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-				{$error}
+				{feedbackStore.error}
 			</div>
 		{/if}
 
-		{#if $loading}
+		{#if feedbackStore.loading}
 			<div class="flex items-center justify-center py-20">
 				<svg class="w-8 h-8 animate-spin text-orange-500" fill="none" viewBox="0 0 24 24">
 					<circle
@@ -142,7 +126,7 @@
 					></path>
 				</svg>
 			</div>
-		{:else if $markers.length === 0}
+		{:else if feedbackStore.markers.length === 0}
 			<div class="text-center py-20">
 				<svg
 					class="w-16 h-16 mx-auto text-gray-300 mb-4"
@@ -167,9 +151,9 @@
 					bind:value={statusFilter}
 					class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
 				>
-					<option value="all">All status ({$markers.length})</option>
-					<option value="open">Open ({$openCount})</option>
-					<option value="resolved">Resolved ({$resolvedCount})</option>
+					<option value="all">All status ({feedbackStore.markers.length})</option>
+					<option value="open">Open ({feedbackStore.openCount})</option>
+					<option value="resolved">Resolved ({feedbackStore.resolvedCount})</option>
 				</select>
 
 				<select
@@ -257,7 +241,7 @@
 												{/if}
 
 												<p class="text-xs text-gray-400 mt-2">
-													{formatDate(marker.created_at)}
+													{formatDateTime(marker.created_at)}
 												</p>
 											</div>
 
@@ -301,7 +285,7 @@
 															<div class="bg-white p-3 rounded-lg border border-gray-200">
 																<p class="text-sm text-gray-700">{comment.content}</p>
 																<p class="text-xs text-gray-400 mt-1">
-																	{comment.author_name || 'Anonymous'} &bull; {formatDate(
+																	{comment.author_name || 'Anonymous'} &bull; {formatDateTime(
 																		comment.created_at
 																	)}
 																</p>

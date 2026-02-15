@@ -2,8 +2,8 @@
 export * from './types/index.js';
 
 // Re-export stores
-export { configStore } from './stores/config.js';
-export { sitemapStore } from './stores/sitemap.js';
+export { configStore } from './stores/config.svelte.js';
+export { sitemapStore } from './stores/sitemap.svelte.js';
 
 // Re-export services
 export { apiService } from './services/api.js';

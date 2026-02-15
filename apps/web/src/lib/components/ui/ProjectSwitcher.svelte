@@ -1,17 +1,14 @@
 <script lang="ts">
-	import { projectsStore } from '$lib/stores/projects';
-	import { sitemapStore } from '$lib/stores/sitemap';
-	import { configStore } from '$lib/stores/config';
+	import { projectsStore } from '$lib/stores/projects.svelte';
+	import { sitemapStore } from '$lib/stores/sitemap.svelte';
+	import { configStore } from '$lib/stores/config.svelte';
 	import type { Project } from '$lib/types';
-
-	const projects = projectsStore.projects;
-	const currentProjectId = projectsStore.currentProjectId;
 
 	let isOpen = $state(false);
 	let showProjectInfo = $state<Project | null>(null);
 	let openKebabId = $state<string | null>(null);
 
-	let currentProject = $derived($currentProjectId ? $projects.find(p => p.id === $currentProjectId) : null);
+	let currentProject = $derived(projectsStore.currentProjectId ? projectsStore.projects.find(p => p.id === projectsStore.currentProjectId) : null);
 
 	function toggleDropdown() {
 		isOpen = !isOpen;
@@ -52,7 +49,7 @@
 	function handleDelete(project: Project) {
 		if (confirm(`Delete project "${project.name}"? This cannot be undone.`)) {
 			projectsStore.deleteProject(project.id);
-			if ($currentProjectId === project.id) {
+			if (projectsStore.currentProjectId === project.id) {
 				sitemapStore.clearAll();
 			}
 		}
@@ -102,15 +99,15 @@
 				<p class="text-xs font-medium text-gray-500 uppercase px-2">Switch Project</p>
 			</div>
 			<div class="max-h-64 overflow-y-auto">
-				{#if $projects.length === 0}
+				{#if projectsStore.projects.length === 0}
 					<div class="p-4 text-center text-gray-400 text-sm">
 						No projects yet
 					</div>
 				{:else}
-					{#each $projects as project (project.id)}
+					{#each projectsStore.projects as project (project.id)}
 						<div
 							class="relative flex items-center hover:bg-gray-50 transition-colors"
-							class:bg-blue-50={$currentProjectId === project.id}
+							class:bg-blue-50={projectsStore.currentProjectId === project.id}
 						>
 							<button
 								onclick={() => selectProject(project.id)}
@@ -120,7 +117,7 @@
 									<p class="font-medium text-gray-800 truncate">{project.name}</p>
 									<p class="text-xs text-gray-500 truncate">{project.baseUrl}</p>
 								</div>
-								{#if $currentProjectId === project.id}
+								{#if projectsStore.currentProjectId === project.id}
 									<svg class="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 									</svg>

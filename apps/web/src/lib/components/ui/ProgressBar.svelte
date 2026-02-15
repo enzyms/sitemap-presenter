@@ -1,44 +1,42 @@
 <script lang="ts">
-	import { sitemapStore } from '$lib/stores/sitemap';
-
-	const progress = sitemapStore.progress;
+	import { sitemapStore } from '$lib/stores/sitemap.svelte';
 
 	let statusText = $derived(
-		$progress.status === 'idle'
+		sitemapStore.progress.status === 'idle'
 			? 'Ready'
-			: $progress.status === 'crawling'
+			: sitemapStore.progress.status === 'crawling'
 				? 'Crawling pages...'
-				: $progress.status === 'screenshotting'
+				: sitemapStore.progress.status === 'screenshotting'
 					? 'Generating screenshots...'
-					: $progress.status === 'complete'
+					: sitemapStore.progress.status === 'complete'
 						? 'Complete!'
-						: $progress.status === 'error'
+						: sitemapStore.progress.status === 'error'
 							? 'Error'
 							: ''
 	);
 
 	let statusColor = $derived(
-		$progress.status === 'complete'
+		sitemapStore.progress.status === 'complete'
 			? 'text-green-600'
-			: $progress.status === 'error'
+			: sitemapStore.progress.status === 'error'
 				? 'text-red-600'
 				: 'text-blue-600'
 	);
 
 	let isActive = $derived(
-		$progress.status === 'crawling' || $progress.status === 'screenshotting'
+		sitemapStore.progress.status === 'crawling' || sitemapStore.progress.status === 'screenshotting'
 	);
 
 	let crawlPercent = $derived(
-		$progress.found > 0 ? Math.round(($progress.crawled / $progress.found) * 100) : 0
+		sitemapStore.progress.found > 0 ? Math.round((sitemapStore.progress.crawled / sitemapStore.progress.found) * 100) : 0
 	);
 
 	let screenshotPercent = $derived(
-		$progress.crawled > 0 ? Math.round(($progress.screenshotted / $progress.crawled) * 100) : 0
+		sitemapStore.progress.crawled > 0 ? Math.round((sitemapStore.progress.screenshotted / sitemapStore.progress.crawled) * 100) : 0
 	);
 </script>
 
-{#if $progress.status !== 'idle'}
+{#if sitemapStore.progress.status !== 'idle'}
 	<div class="bg-white rounded-lg shadow-lg p-4 w-80">
 		<div class="flex items-center justify-between mb-3">
 			<h3 class="text-sm font-medium text-gray-700">Progress</h3>
@@ -73,20 +71,20 @@
 		<div class="grid grid-cols-2 gap-3 mb-4">
 			<div class="bg-gray-50 rounded-md p-2">
 				<p class="text-xs text-gray-500">Pages Found</p>
-				<p class="text-lg font-semibold text-gray-800">{$progress.found}</p>
+				<p class="text-lg font-semibold text-gray-800">{sitemapStore.progress.found}</p>
 			</div>
 			<div class="bg-gray-50 rounded-md p-2">
 				<p class="text-xs text-gray-500">Crawled</p>
-				<p class="text-lg font-semibold text-gray-800">{$progress.crawled}</p>
+				<p class="text-lg font-semibold text-gray-800">{sitemapStore.progress.crawled}</p>
 			</div>
 			<div class="bg-gray-50 rounded-md p-2">
 				<p class="text-xs text-gray-500">Screenshots</p>
-				<p class="text-lg font-semibold text-gray-800">{$progress.screenshotted}</p>
+				<p class="text-lg font-semibold text-gray-800">{sitemapStore.progress.screenshotted}</p>
 			</div>
 			<div class="bg-gray-50 rounded-md p-2">
 				<p class="text-xs text-gray-500">Errors</p>
-				<p class="text-lg font-semibold {$progress.errors > 0 ? 'text-red-600' : 'text-gray-800'}">
-					{$progress.errors}
+				<p class="text-lg font-semibold {sitemapStore.progress.errors > 0 ? 'text-red-600' : 'text-gray-800'}">
+					{sitemapStore.progress.errors}
 				</p>
 			</div>
 		</div>

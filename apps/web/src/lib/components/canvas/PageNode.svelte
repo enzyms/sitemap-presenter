@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { Handle, Position } from '@xyflow/svelte';
 	import type { PageData } from '$lib/types';
-	import { sitemapStore } from '$lib/stores/sitemap';
-	import { pageViewerStore } from '$lib/stores/pageViewer';
-	import { projectsStore } from '$lib/stores/projects';
+	import { sitemapStore } from '$lib/stores/sitemap.svelte';
+	import { pageViewerStore } from '$lib/stores/pageViewer.svelte';
+	import { projectsStore } from '$lib/stores/projects.svelte';
 
 	interface Props {
 		id: string;
@@ -13,24 +13,18 @@
 
 	let { id, data, selected = false }: Props = $props();
 
-	const zoomLevel = sitemapStore.zoomLevel;
-	const currentProjectId = projectsStore.currentProjectId;
-	const projects = projectsStore.projects;
-	const searchQuery = sitemapStore.searchQuery;
-	const edges = sitemapStore.edges;
-
 	// Check if this node has children
-	let hasChildren = $derived($edges.some((e) => e.source === id));
+	let hasChildren = $derived(sitemapStore.edges.some((e) => e.source === id));
 
 	// Check if node matches search query
 	let matchesSearch = $derived.by(() => {
-		if (!$searchQuery) return true;
-		const query = $searchQuery.toLowerCase();
+		if (!sitemapStore.searchQuery) return true;
+		const query = sitemapStore.searchQuery.toLowerCase();
 		return data.url.toLowerCase().includes(query) || data.title.toLowerCase().includes(query);
 	});
 
 	// Level of Detail based on zoom - removed minimal, always show at least thumbnail
-	let lod = $derived($zoomLevel > 0.3 ? 'thumbnail' : 'full');
+	let lod = $derived(sitemapStore.zoomLevel > 0.3 ? 'thumbnail' : 'full');
 	let showIframe = $derived(lod === 'full' && selected);
 
 	// Get feedback counts for this page
@@ -43,10 +37,10 @@
 		}
 
 		// Fall back to computing from projects store
-		if (!$currentProjectId) {
+		if (!projectsStore.currentProjectId) {
 			return { total: 0, open: 0, resolved: 0, allResolved: false };
 		}
-		const project = $projects.find(p => p.id === $currentProjectId);
+		const project = projectsStore.projects.find(p => p.id === projectsStore.currentProjectId);
 		if (!project?.cachedData?.feedbackMarkers) {
 			return { total: 0, open: 0, resolved: 0, allResolved: false };
 		}
@@ -110,9 +104,9 @@
 	class:ring-2={selected}
 	class:ring-blue-500={selected}
 	class:ring-offset-2={selected}
-	class:opacity-30={$searchQuery && !matchesSearch}
-	class:ring-4={$searchQuery && matchesSearch}
-	class:ring-yellow-400={$searchQuery && matchesSearch}
+	class:opacity-30={sitemapStore.searchQuery && !matchesSearch}
+	class:ring-4={sitemapStore.searchQuery && matchesSearch}
+	class:ring-yellow-400={sitemapStore.searchQuery && matchesSearch}
 	onclick={handleClick}
 >
 	<Handle type="target" position={Position.Top} class="!bg-gray-400" />

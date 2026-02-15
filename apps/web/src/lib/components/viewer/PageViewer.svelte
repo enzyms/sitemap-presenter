@@ -1,117 +1,38 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
-	import { get } from 'svelte/store';
-	import { pageViewerStore } from '$lib/stores/pageViewer';
-	import { sitemapStore } from '$lib/stores/sitemap';
-	import { projectsStore } from '$lib/stores/projects';
-	import { feedbackStore } from '$lib/stores/feedback';
+	import { onMount } from 'svelte';
+	import { pageViewerStore } from '$lib/stores/pageViewer.svelte';
+	import { sitemapStore } from '$lib/stores/sitemap.svelte';
+	import { projectsStore } from '$lib/stores/projects.svelte';
+	import { feedbackStore } from '$lib/stores/feedback.svelte';
+	import { IframeMessenger } from '$lib/services/iframeMessenger';
+	import { markerSync } from '$lib/services/markerSync';
+	import { convertSupabaseMarkerToFeedback } from '$lib/utils/markerConverters';
 	import FeedbackSidebar from './FeedbackSidebar.svelte';
-	import type {
-		FeedbackMarker,
-		IframeToSitemapMessage,
-		SitemapToIframeMessage,
-		MarkerStatus
-	} from '$lib/types';
+	import type { FeedbackMarker, IframeToSitemapMessage, MarkerStatus } from '$lib/types';
 
-	const currentProjectId = projectsStore.currentProjectId;
-
-	const isOpen = pageViewerStore.isOpen;
-	const pageUrl = pageViewerStore.pageUrl;
-	const pageTitle = pageViewerStore.pageTitle;
-	const screenshotUrl = pageViewerStore.screenshotUrl;
-
-	// Supabase feedback
-	const supabaseMarkers = feedbackStore.markersForCurrentPage;
-	const feedbackLoading = feedbackStore.loading;
+	const messenger = new IframeMessenger();
 
 	let iframeLoaded = $state(false);
 	let iframeError = $state(false);
 	let useScreenshot = $state(false);
 	let loadTimeout: ReturnType<typeof setTimeout>;
-
-	// Feedback markers - now from Supabase via feedbackStore
 	let iframeRef = $state<HTMLIFrameElement | null>(null);
 	let highlightedMarkerId = $state<string | null>(null);
 	let showFeedbackSidebar = $state(true);
 	let feedbackInitialized = $state(false);
 
-	// Convert Supabase markers to local format for FeedbackSidebar
-	let feedbackMarkers = $derived.by(() => {
-		return $supabaseMarkers.map(m => ({
-			id: m.id,
-			pageUrl: m.page_url,
-			pagePath: m.page_path,
-			number: m.number,
-			anchor: m.anchor,
-			fallbackPosition: m.fallback_position,
-			viewport: m.viewport,
-			status: m.status,
-			comments: m.comments.map(c => ({
-				id: c.id,
-				author: c.author_name || 'Anonymous',
-				content: c.content,
-				createdAt: c.created_at
-			})),
-			createdAt: m.created_at,
-			updatedAt: m.updated_at
-		} as FeedbackMarker));
+	let feedbackMarkers = $derived(feedbackStore.markersForCurrentPage.map(convertSupabaseMarkerToFeedback));
+
+	// Keep messenger iframe ref in sync
+	$effect(() => {
+		messenger.setIframe(iframeRef);
 	});
 
-	// Send message to iframe
-	function sendToIframe(message: SitemapToIframeMessage): void {
-		if (!iframeRef?.contentWindow || !$pageUrl) return;
-
-		try {
-			const url = new URL($pageUrl);
-			iframeRef.contentWindow.postMessage(message, url.origin);
-		} catch (e) {
-			console.error('Failed to send message to iframe:', e);
+	$effect(() => {
+		if (pageViewerStore.pageUrl) {
+			messenger.setTargetUrl(pageViewerStore.pageUrl);
 		}
-	}
-
-	// Request markers from iframe for its current page
-	function requestMarkers(): void {
-		// Don't specify pagePath - let the iframe use its current window.location.pathname
-		// This way, when user navigates within the iframe, we get markers for the new page
-		sendToIframe({
-			type: 'FEEDBACK_GET_MARKERS'
-		});
-	}
-
-	// Update marker status via iframe
-	function updateMarkerStatus(markerId: string, status: MarkerStatus): void {
-		sendToIframe({
-			type: 'FEEDBACK_UPDATE_STATUS',
-			markerId,
-			status
-		});
-	}
-
-	// Add comment via iframe
-	function addMarkerComment(markerId: string, content: string): void {
-		sendToIframe({
-			type: 'FEEDBACK_ADD_COMMENT',
-			markerId,
-			content
-		});
-	}
-
-	// Delete marker via iframe
-	function deleteMarker(markerId: string): void {
-		sendToIframe({
-			type: 'FEEDBACK_DELETE_MARKER',
-			markerId
-		});
-	}
-
-	// Highlight marker in iframe
-	function highlightMarker(markerId: string | null): void {
-		highlightedMarkerId = markerId;
-		sendToIframe({
-			type: 'FEEDBACK_HIGHLIGHT_MARKER',
-			markerId
-		});
-	}
+	});
 
 	function handleClose() {
 		pageViewerStore.closeViewer();
@@ -124,18 +45,12 @@
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
-		if (!$isOpen) return;
-
-		if (event.key === 'Escape') {
-			handleClose();
-		}
+		if (pageViewerStore.isOpen && event.key === 'Escape') handleClose();
 	}
 
 	function handleIframeLoad() {
 		iframeLoaded = true;
 		if (loadTimeout) clearTimeout(loadTimeout);
-		// Markers are now received via FEEDBACK_NAVIGATION message from the iframe
-		// No need to request them separately
 	}
 
 	function handleIframeError() {
@@ -149,89 +64,24 @@
 		if (loadTimeout) clearTimeout(loadTimeout);
 	}
 
-	// Save current markers to project cache
-	function saveMarkersToCache(markers: FeedbackMarker[]): void {
-		if (!$currentProjectId || !$pageUrl) return;
-
-		try {
-			const url = new URL($pageUrl);
-			const pagePath = url.pathname;
-			const project = projectsStore.getProject($currentProjectId);
-			const existingMarkers = project?.cachedData?.feedbackMarkers || {};
-
-			console.log(`[PageViewer] Saving ${markers.length} markers for path "${pagePath}" to project ${$currentProjectId}`);
-
-			projectsStore.saveFeedbackMarkers($currentProjectId, {
-				...existingMarkers,
-				[pagePath]: markers
-			});
-		} catch (e) {
-			console.error('Failed to save feedback markers:', e);
-		}
-	}
-
 	// Handle messages from iframe
-	function handleMessage(event: MessageEvent) {
-		const data = event.data as IframeToSitemapMessage | undefined;
-		if (!data?.type?.startsWith('FEEDBACK_')) return;
-
-		console.log('[PageViewer] Received message:', data.type, data);
-
+	function handleIframeMessage(data: IframeToSitemapMessage) {
 		switch (data.type) {
-			case 'FEEDBACK_MARKERS_RESPONSE':
-				console.log('[PageViewer] MARKERS_RESPONSE:', data.markers.length, 'markers');
-				feedbackMarkers = data.markers;
-				saveMarkersToCache(data.markers);
-				break;
-
-			case 'FEEDBACK_MARKER_CREATED':
-				console.log('[PageViewer] MARKER_CREATED:', data.marker);
-				feedbackMarkers = [...feedbackMarkers, data.marker];
-				saveMarkersToCache(feedbackMarkers);
-				break;
-
-			case 'FEEDBACK_MARKER_UPDATED':
-				console.log('[PageViewer] MARKER_UPDATED:', data.marker);
-				feedbackMarkers = feedbackMarkers.map((m) =>
-					m.id === data.marker.id ? data.marker : m
-				);
-				saveMarkersToCache(feedbackMarkers);
-				break;
-
-			case 'FEEDBACK_MARKER_DELETED':
-				console.log('[PageViewer] MARKER_DELETED:', data.markerId);
-				feedbackMarkers = feedbackMarkers.filter((m) => m.id !== data.markerId);
-				saveMarkersToCache(feedbackMarkers);
-				break;
-
 			case 'FEEDBACK_ACTION_CONFIRMED':
-				if (data.success) {
-					requestMarkers();
-				}
+				if (data.success) messenger.getMarkers();
 				break;
-
 			case 'FEEDBACK_NAVIGATION':
-				// Iframe navigated to a new page - update viewer, node, and markers
-				console.log('[PageViewer] NAVIGATION:', data.url, 'with', data.markers?.length || 0, 'markers');
 				handleIframeNavigation(data.url, data.title, data.markers);
 				break;
 		}
 	}
 
-	// Handle navigation within the iframe
-	function handleIframeNavigation(newUrl: string, newTitle: string, markers: FeedbackMarker[]) {
-		// Update the viewer's displayed URL and title
+	function handleIframeNavigation(newUrl: string, newTitle: string, markers?: FeedbackMarker[]) {
 		pageViewerStore.updateCurrentPage(newUrl, newTitle);
 
-		// Find the node with this URL in the sitemap
-		const nodes = get(sitemapStore.nodes);
-		const matchingNode = nodes.find((n) => n.data.url === newUrl);
-
+		const matchingNode = sitemapStore.nodes.find((n) => n.data.url === newUrl);
 		if (matchingNode) {
-			// Select the node in the sitemap canvas
 			sitemapStore.selectNode(matchingNode.id);
-
-			// Update screenshot if available
 			if (matchingNode.data.fullScreenshotUrl || matchingNode.data.thumbnailUrl) {
 				pageViewerStore.updateScreenshot(
 					matchingNode.data.fullScreenshotUrl || matchingNode.data.thumbnailUrl || null
@@ -240,57 +90,41 @@
 		}
 
 		highlightedMarkerId = null;
+		markerSync.setCurrentPage(newUrl);
 
-		// Update feedbackStore to filter for the new page
-		try {
-			const url = new URL(newUrl);
-			feedbackStore.setCurrentPage(url.pathname);
-		} catch {
-			// Invalid URL
-		}
-
-		// Still save iframe markers to project cache for display on nodes (backward compat)
-		if (markers && markers.length > 0) {
-			saveMarkersToCache(markers);
+		if (markers && markers.length > 0 && projectsStore.currentProjectId && pageViewerStore.pageUrl) {
+			markerSync.saveToProjectCache(projectsStore.currentProjectId, pageViewerStore.pageUrl, markers);
 		}
 	}
 
 	// Sidebar callbacks
 	function handleMarkerHover(markerId: string | null) {
-		// Only update local highlight state for visual feedback in sidebar
-		// Don't send to iframe - that happens only on click
 		highlightedMarkerId = markerId;
 	}
 
 	function handleMarkerClick(marker: FeedbackMarker) {
-		// Send highlight to iframe only on click
-		highlightMarker(marker.id);
+		highlightedMarkerId = marker.id;
+		messenger.highlightMarker(marker.id);
 	}
 
 	async function handleMarkerStatusChange(markerId: string, status: MarkerStatus) {
-		// Update in Supabase via feedbackStore
 		await feedbackStore.updateMarkerStatus(markerId, status);
-		// Also send to iframe for visual update
-		updateMarkerStatus(markerId, status);
+		messenger.updateStatus(markerId, status);
 	}
 
 	async function handleMarkerDelete(markerId: string) {
-		// Delete from Supabase via feedbackStore
 		await feedbackStore.deleteMarker(markerId);
-		// Also send to iframe for visual update
-		deleteMarker(markerId);
+		messenger.deleteMarker(markerId);
 	}
 
 	async function handleMarkerComment(markerId: string, content: string) {
-		// Add to Supabase via feedbackStore
 		await feedbackStore.addComment(markerId, content);
-		// Also send to iframe for visual update
-		addMarkerComment(markerId, content);
+		messenger.addComment(markerId, content);
 	}
 
-	// Reset and start timeout when viewer opens
+	// Initialize when viewer opens
 	$effect(() => {
-		if ($isOpen && !useScreenshot) {
+		if (pageViewerStore.isOpen && !useScreenshot) {
 			iframeLoaded = false;
 			iframeError = false;
 			loadTimeout = setTimeout(() => {
@@ -300,22 +134,10 @@
 				}
 			}, 8000);
 
-			// Initialize feedbackStore with current project's site
-			if (!feedbackInitialized && $currentProjectId) {
-				const project = projectsStore.getProject($currentProjectId);
-				if (project?.siteId) {
-					feedbackStore.initializeBySiteId(project.siteId).then(success => {
-						if (success && $pageUrl) {
-							try {
-								const url = new URL($pageUrl);
-								feedbackStore.setCurrentPage(url.pathname);
-							} catch {
-								// Invalid URL
-							}
-						}
-						feedbackInitialized = true;
-					});
-				}
+			if (!feedbackInitialized && projectsStore.currentProjectId && pageViewerStore.pageUrl) {
+				markerSync.initialize(projectsStore.currentProjectId, pageViewerStore.pageUrl).then(() => {
+					feedbackInitialized = true;
+				});
 			}
 		}
 		return () => {
@@ -323,30 +145,25 @@
 		};
 	});
 
-	// Update feedbackStore page filter when pageUrl changes
+	// Update page filter when URL changes
 	$effect(() => {
-		if ($pageUrl && feedbackInitialized) {
-			try {
-				const url = new URL($pageUrl);
-				feedbackStore.setCurrentPage(url.pathname);
-			} catch {
-				// Invalid URL
-			}
+		if (pageViewerStore.pageUrl && feedbackInitialized) {
+			markerSync.setCurrentPage(pageViewerStore.pageUrl);
 		}
 	});
 
-	// Listen for postMessage responses
 	onMount(() => {
-		window.addEventListener('message', handleMessage);
+		const cleanup = messenger.listen(handleIframeMessage);
 		return () => {
-			window.removeEventListener('message', handleMessage);
+			cleanup();
+			messenger.destroy();
 		};
 	});
 </script>
 
 <svelte:window onkeydown={handleKeyDown} />
 
-{#if $isOpen}
+{#if pageViewerStore.isOpen}
 	<!-- Backdrop -->
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -357,19 +174,18 @@
 		<!-- Header -->
 		<header class="flex items-center justify-between px-4 py-3 border-b bg-gray-200">
 			<div class="flex items-center gap-4 flex-1 min-w-0">
-				<h2 class="text-lg font-semibold text-gray-800 truncate">{$pageTitle}</h2>
+				<h2 class="text-lg font-semibold text-gray-800 truncate">{pageViewerStore.pageTitle}</h2>
 				<a
-					href={$pageUrl}
+					href={pageViewerStore.pageUrl}
 					target="_blank"
 					rel="noopener noreferrer"
 					class="text-sm text-blue-600 hover:text-blue-800 hover:underline truncate hidden sm:block"
 				>
-					{$pageUrl}
+					{pageViewerStore.pageUrl}
 				</a>
 			</div>
 
 			<div class="flex items-center gap-3">
-				<!-- Feedback sidebar toggle -->
 				<button
 					onclick={() => (showFeedbackSidebar = !showFeedbackSidebar)}
 					class="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
@@ -381,12 +197,7 @@
 					title="Toggle feedback sidebar"
 				>
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
-						/>
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
 					</svg>
 					{#if feedbackMarkers.length > 0}
 						<span
@@ -400,19 +211,13 @@
 					{/if}
 				</button>
 
-				<!-- Close button -->
 				<button
 					onclick={handleClose}
 					aria-label="Close viewer"
 					class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
 				>
 					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M6 18L18 6M6 6l12 12"
-						/>
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
 					</svg>
 				</button>
 			</div>
@@ -420,30 +225,18 @@
 
 		<!-- Main content area with sidebar -->
 		<div class="flex-1 flex overflow-hidden">
-			<!-- Main viewer -->
 			<div class="flex-1 relative overflow-hidden bg-gray-100">
 				{#if useScreenshot}
-					<!-- Screenshot mode -->
 					<div class="absolute inset-0 overflow-auto">
-						{#if $screenshotUrl}
+						{#if pageViewerStore.screenshotUrl}
 							<div class="relative inline-block min-w-full">
-								<img src={$screenshotUrl} alt={$pageTitle} class="block max-w-none" />
+								<img src={pageViewerStore.screenshotUrl} alt={pageViewerStore.pageTitle} class="block max-w-none" />
 							</div>
 						{:else}
 							<div class="w-full h-full flex items-center justify-center text-gray-400">
 								<div class="text-center">
-									<svg
-										class="w-16 h-16 mx-auto mb-4"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="1.5"
-											d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-										/>
+									<svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
 									</svg>
 									<p>No screenshot available</p>
 								</div>
@@ -451,28 +244,12 @@
 						{/if}
 					</div>
 				{:else}
-					<!-- Iframe mode -->
 					{#if !iframeLoaded}
 						<div class="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
 							<div class="text-center">
-								<svg
-									class="w-12 h-12 mx-auto mb-4 animate-spin text-blue-500"
-									fill="none"
-									viewBox="0 0 24 24"
-								>
-									<circle
-										class="opacity-25"
-										cx="12"
-										cy="12"
-										r="10"
-										stroke="currentColor"
-										stroke-width="4"
-									></circle>
-									<path
-										class="opacity-75"
-										fill="currentColor"
-										d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-									></path>
+								<svg class="w-12 h-12 mx-auto mb-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 								</svg>
 								<p class="text-gray-500">Loading page...</p>
 							</div>
@@ -482,30 +259,13 @@
 					{#if iframeError}
 						<div class="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
 							<div class="text-center max-w-md px-4">
-								<svg
-									class="w-16 h-16 mx-auto mb-4 text-yellow-500"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-									/>
+								<svg class="w-16 h-16 mx-auto mb-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
 								</svg>
-								<p class="text-gray-700 font-medium mb-2">
-									This site cannot be loaded in the viewer
-								</p>
-								<p class="text-gray-500 text-sm mb-4">
-									Some sites block embedding for security reasons (X-Frame-Options).
-								</p>
-								{#if $screenshotUrl}
-									<button
-										onclick={switchToScreenshot}
-										class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-									>
+								<p class="text-gray-700 font-medium mb-2">This site cannot be loaded in the viewer</p>
+								<p class="text-gray-500 text-sm mb-4">Some sites block embedding for security reasons (X-Frame-Options).</p>
+								{#if pageViewerStore.screenshotUrl}
+									<button onclick={switchToScreenshot} class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">
 										View screenshot instead
 									</button>
 								{/if}
@@ -513,11 +273,11 @@
 						</div>
 					{/if}
 
-					{#if $pageUrl && !iframeError}
+					{#if pageViewerStore.pageUrl && !iframeError}
 						<iframe
 							bind:this={iframeRef}
-							src={$pageUrl}
-							title={$pageTitle}
+							src={pageViewerStore.pageUrl}
+							title={pageViewerStore.pageTitle}
 							class="absolute inset-0 w-full h-full border-0"
 							onload={handleIframeLoad}
 							onerror={handleIframeError}
@@ -526,7 +286,6 @@
 				{/if}
 			</div>
 
-			<!-- Feedback sidebar -->
 			{#if showFeedbackSidebar && !useScreenshot}
 				<FeedbackSidebar
 					markers={feedbackMarkers}
@@ -540,7 +299,6 @@
 			{/if}
 		</div>
 
-		<!-- Footer -->
 		<footer class="flex items-center justify-center px-4 py-2 border-t bg-gray-50">
 			<span class="text-xs text-gray-400">Press Esc to close</span>
 		</footer>

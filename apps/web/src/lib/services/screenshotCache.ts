@@ -23,6 +23,20 @@ function makeCacheKey(siteId: string, url: string): string {
 class ScreenshotCacheService {
   private db: IDBDatabase | null = null;
   private initPromise: Promise<void> | null = null;
+  private objectUrls = new Set<string>();
+
+  private trackObjectUrl(url: string): string {
+    this.objectUrls.add(url);
+    return url;
+  }
+
+  /** Revoke all created Object URLs to free memory */
+  revokeAll(): void {
+    for (const url of this.objectUrls) {
+      URL.revokeObjectURL(url);
+    }
+    this.objectUrls.clear();
+  }
 
   async init(): Promise<void> {
     if (this.db) return;
@@ -165,8 +179,8 @@ class ScreenshotCacheService {
       const cached = await this.get(siteId, pageUrl);
       if (cached) {
         return {
-          thumbnailObjectUrl: URL.createObjectURL(cached.thumbnailBlob),
-          fullPageObjectUrl: cached.fullPageBlob ? URL.createObjectURL(cached.fullPageBlob) : undefined
+          thumbnailObjectUrl: this.trackObjectUrl(URL.createObjectURL(cached.thumbnailBlob)),
+          fullPageObjectUrl: cached.fullPageBlob ? this.trackObjectUrl(URL.createObjectURL(cached.fullPageBlob)) : undefined
         };
       }
 
@@ -187,8 +201,8 @@ class ScreenshotCacheService {
       await this.set(siteId, pageUrl, thumbnailBlob, fullPageBlob);
 
       return {
-        thumbnailObjectUrl: URL.createObjectURL(thumbnailBlob),
-        fullPageObjectUrl: fullPageBlob ? URL.createObjectURL(fullPageBlob) : undefined
+        thumbnailObjectUrl: this.trackObjectUrl(URL.createObjectURL(thumbnailBlob)),
+        fullPageObjectUrl: fullPageBlob ? this.trackObjectUrl(URL.createObjectURL(fullPageBlob)) : undefined
       };
     } catch (error) {
       console.error('[ScreenshotCache] Failed to fetch and cache:', error);
@@ -204,8 +218,8 @@ class ScreenshotCacheService {
     if (!cached) return null;
 
     return {
-      thumbnailObjectUrl: URL.createObjectURL(cached.thumbnailBlob),
-      fullPageObjectUrl: cached.fullPageBlob ? URL.createObjectURL(cached.fullPageBlob) : undefined
+      thumbnailObjectUrl: this.trackObjectUrl(URL.createObjectURL(cached.thumbnailBlob)),
+      fullPageObjectUrl: cached.fullPageBlob ? this.trackObjectUrl(URL.createObjectURL(cached.fullPageBlob)) : undefined
     };
   }
 

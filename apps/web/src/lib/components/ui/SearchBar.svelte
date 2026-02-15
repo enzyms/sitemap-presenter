@@ -1,9 +1,5 @@
 <script lang="ts">
-	import { sitemapStore } from '$lib/stores/sitemap';
-
-	const searchQuery = sitemapStore.searchQuery;
-	const filteredNodes = sitemapStore.filteredNodes;
-	const nodes = sitemapStore.nodes;
+	import { sitemapStore } from '$lib/stores/sitemap.svelte';
 
 	let inputValue = $state('');
 
@@ -18,8 +14,8 @@
 		sitemapStore.setSearchQuery('');
 	}
 
-	let resultCount = $derived($filteredNodes.length);
-	let totalCount = $derived($nodes.length);
+	let resultCount = $derived(sitemapStore.filteredNodes.length);
+	let totalCount = $derived(sitemapStore.nodes.length);
 	let showResults = $derived(inputValue.length > 0 && totalCount > 0);
 </script>
 

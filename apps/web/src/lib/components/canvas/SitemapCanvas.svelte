@@ -7,6 +7,7 @@
 		BackgroundVariant,
 		Panel,
 		MarkerType,
+		SelectionMode,
 		useSvelteFlow,
 		type NodeTypes,
 		type EdgeTypes
@@ -16,8 +17,8 @@
 
 	import PageNode from './PageNode.svelte';
 	import LinkEdge from './LinkEdge.svelte';
-	import { sitemapStore } from '$lib/stores/sitemap';
-	import { configStore } from '$lib/stores/config';
+	import { sitemapStore } from '$lib/stores/sitemap.svelte';
+	import { configStore } from '$lib/stores/config.svelte';
 	import { apiService } from '$lib/services/api';
 	import { socketService } from '$lib/services/socket';
 
@@ -43,24 +44,17 @@
 		smoothstep: LinkEdge as any
 	};
 
-	const nodes = sitemapStore.nodes;
-	const edges = sitemapStore.edges;
-	const layoutMode = sitemapStore.layoutMode;
-	const progress = sitemapStore.progress;
-	const config = configStore;
-
 	// Search state
 	let searchValue = $state('');
-	const filteredNodes = sitemapStore.filteredNodes;
 
 	// Crawl settings popover
 	let showCrawlSettings = $state(false);
 	let isLoading = $state(false);
 	let crawlError = $state('');
 
-	let isCrawling = $derived($progress.status === 'crawling' || $progress.status === 'screenshotting');
-	let resultCount = $derived($filteredNodes.length);
-	let totalCount = $derived($nodes.length);
+	let isCrawling = $derived(sitemapStore.progress.status === 'crawling' || sitemapStore.progress.status === 'screenshotting');
+	let resultCount = $derived(sitemapStore.filteredNodes.length);
+	let totalCount = $derived(sitemapStore.nodes.length);
 	let showSearchResults = $derived(searchValue.length > 0 && totalCount > 0);
 
 	function handleViewportChange(event: { viewport: { zoom?: number } }) {
@@ -80,20 +74,25 @@
 		showCrawlSettings = false;
 	}
 
-	// Handle node drag - log all drag events to debug
-	function handleNodeDrag(event: { targetNode: { id: string; position: { x: number; y: number } } }) {
-		console.log('[SitemapCanvas] nodedrag:', event.targetNode?.id, event.targetNode?.position);
+	function handleNodeDragStart(event: { targetNode: { id: string } | null }) {
+		if (event.targetNode?.id) {
+			sitemapStore.onNodeDragStart(event.targetNode.id);
+		}
 	}
 
-	function handleNodeDragStart(event: { targetNode: { id: string; position: { x: number; y: number } } }) {
-		console.log('[SitemapCanvas] nodedragstart:', event.targetNode?.id);
-	}
-
-	// Handle node drag stop - save positions after drag
-	function handleNodeDragStop(event: { targetNode: { id: string; position: { x: number; y: number } } }) {
-		console.log('[SitemapCanvas] nodedragstop:', event);
+	function handleNodeDrag(event: { targetNode: { id: string; position: { x: number; y: number } } | null }) {
 		if (event.targetNode?.id && event.targetNode?.position) {
-			console.log('[SitemapCanvas] Saving position for', event.targetNode.id);
+			sitemapStore.onNodeDrag(event.targetNode.id, event.targetNode.position);
+		}
+	}
+
+	function handleNodeDragStop(event: { targetNode: { id: string; position: { x: number; y: number } } | null; nodes?: Array<{ id: string; position: { x: number; y: number } }> }) {
+		// Multi-selection drag: save all dragged node positions
+		if (event.nodes && event.nodes.length > 1) {
+			sitemapStore.onMultiNodeDragStop(event.nodes);
+			return;
+		}
+		if (event.targetNode?.id && event.targetNode?.position) {
 			sitemapStore.onNodeDragStop(event.targetNode.id, event.targetNode.position);
 		}
 	}
@@ -136,7 +135,7 @@
 		crawlError = '';
 
 		try {
-			new URL($config.url);
+			new URL(configStore.url);
 		} catch {
 			crawlError = 'Please enter a valid URL';
 			return;
@@ -146,7 +145,7 @@
 		sitemapStore.reset();
 
 		try {
-			const response = await apiService.startCrawl($config);
+			const response = await apiService.startCrawl(configStore.current);
 			sitemapStore.setSessionId(response.sessionId);
 			sitemapStore.setStatus('crawling');
 			socketService.connect(response.sessionId, siteId);
@@ -160,9 +159,9 @@
 	}
 
 	async function handleCancelCrawl() {
-		if ($progress.sessionId) {
+		if (sitemapStore.progress.sessionId) {
 			try {
-				await apiService.cancelCrawl($progress.sessionId);
+				await apiService.cancelCrawl(sitemapStore.progress.sessionId);
 				socketService.disconnect();
 				sitemapStore.setStatus('idle');
 			} catch (err) {
@@ -176,10 +175,13 @@
 	<SvelteFlow
 		{nodeTypes}
 		{edgeTypes}
-		nodes={$nodes}
-		edges={$edges}
+		nodes={sitemapStore.nodes}
+		edges={sitemapStore.edges}
 		fitView
 		nodesDraggable={true}
+		selectionOnDrag
+		panOnDrag={[1, 2]}
+		selectionMode={SelectionMode.Partial}
 		defaultEdgeOptions={{
 			type: 'smoothstep',
 			animated: false,
@@ -192,7 +194,7 @@
 		maxZoom={2}
 		onnodeclick={handleNodeClick}
 		onpaneclick={handlePaneClick}
-		onviewportchange={handleViewportChange}
+		{...({ onviewportchange: handleViewportChange } as any)}
 		onnodedragstart={handleNodeDragStart}
 		onnodedrag={handleNodeDrag}
 		onnodedragstop={handleNodeDragStop}
@@ -237,7 +239,7 @@
 									<label class="block text-xs font-medium text-gray-600 mb-1">Website URL</label>
 									<input
 										type="url"
-										value={$config.url}
+										value={configStore.url}
 										oninput={handleUrlChange}
 										placeholder="https://example.com"
 										class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500"
@@ -246,11 +248,11 @@
 
 								<div>
 									<label class="block text-xs font-medium text-gray-600 mb-1">
-										Max Depth: {$config.maxDepth}
+										Max Depth: {configStore.maxDepth}
 									</label>
 									<input
 										type="range"
-										value={$config.maxDepth}
+										value={configStore.maxDepth}
 										oninput={handleMaxDepthChange}
 										min="1"
 										max="5"
@@ -260,11 +262,11 @@
 
 								<div>
 									<label class="block text-xs font-medium text-gray-600 mb-1">
-										Max Pages: {$config.maxPages}
+										Max Pages: {configStore.maxPages}
 									</label>
 									<input
 										type="range"
-										value={$config.maxPages}
+										value={configStore.maxPages}
 										oninput={handleMaxPagesChange}
 										min="3"
 										max="500"
@@ -278,7 +280,7 @@
 
 								<button
 									onclick={handleStartCrawl}
-									disabled={isLoading || !$config.url}
+									disabled={isLoading || !configStore.url}
 									class="w-full px-3 py-2 bg-orange-500 text-white text-sm font-medium rounded hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 								>
 									{isLoading ? 'Starting...' : 'Start Crawl'}
@@ -294,7 +296,7 @@
 				<select
 					class="px-3 py-1.5 rounded-md border border-gray-300 text-sm bg-white cursor-pointer
 					       hover:border-gray-400 focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-					value={$layoutMode}
+					value={sitemapStore.layoutMode}
 					onchange={(e) => sitemapStore.setLayoutMode(e.currentTarget.value as 'hierarchical' | 'radial')}
 				>
 					<option value="hierarchical">Rows</option>
@@ -372,7 +374,7 @@
 							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 						</svg>
 						<span>
-							{$progress.crawled} crawled, {$progress.screenshotted} screenshots
+							{sitemapStore.progress.crawled} crawled, {sitemapStore.progress.screenshotted} screenshots
 						</span>
 					</div>
 				</div>

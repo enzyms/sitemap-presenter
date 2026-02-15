@@ -4,6 +4,7 @@
 	import AppHeader from '$lib/components/ui/AppHeader.svelte';
 	import { getSupabase, type SiteWithStats } from '$lib/services/supabase';
 	import { screenshotCache } from '$lib/services/screenshotCache';
+	import { formatDate } from '$lib/utils/formatDate';
 
 	let sites = $state<SiteWithStats[]>([]);
 	let loading = $state(true);
@@ -47,9 +48,11 @@
 			// Remove from local state
 			sites = sites.filter(s => s.id !== site.id);
 
-			// Clear localStorage cache
+			// Clear localStorage cache (sitemap data + node positions for both layout modes)
 			try {
 				localStorage.removeItem(`sitemap-cache-${site.id}`);
+				localStorage.removeItem(`sitemap-node-positions-${site.id}-hierarchical`);
+				localStorage.removeItem(`sitemap-node-positions-${site.id}-radial`);
 			} catch {}
 
 			// Clear IndexedDB screenshot cache
@@ -109,14 +112,6 @@
 		} finally {
 			loading = false;
 		}
-	}
-
-	function formatDate(dateStr: string): string {
-		return new Date(dateStr).toLocaleDateString('en-US', {
-			month: 'short',
-			day: 'numeric',
-			year: 'numeric'
-		});
 	}
 
 	onMount(() => {

@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import AppHeader from '$lib/components/ui/AppHeader.svelte';
 	import { getSupabase } from '$lib/services/supabase';
+	import { extractDomain } from '$lib/utils/parseUrl';
 
 	let name = $state('');
 	let domain = $state('');
@@ -17,14 +18,7 @@
 		error = null;
 
 		try {
-			// Clean domain (remove protocol if present)
-			let cleanDomain = domain.trim();
-			try {
-				const url = new URL(cleanDomain.startsWith('http') ? cleanDomain : `https://${cleanDomain}`);
-				cleanDomain = url.hostname;
-			} catch {
-				// Keep as is if not a valid URL
-			}
+			const cleanDomain = extractDomain(domain.trim());
 
 			const supabase = getSupabase();
 			const { data, error: createError } = await supabase
