@@ -275,9 +275,6 @@
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
 							</svg>
 						</button>
-						<span class="px-2 py-1 text-xs font-medium text-gray-500 tabular-nums">
-							{currentFeedbackIndex >= 0 ? currentFeedbackIndex + 1 : '–'}/{feedbackNodeCount}
-						</span>
 						<button
 							onclick={() => navigateToFeedbackNode('next')}
 							class="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
