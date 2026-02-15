@@ -44,6 +44,18 @@
 		smoothstep: LinkEdge as any
 	};
 
+	// Time ago helper
+	function timeAgo(dateString: string): string {
+		const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+		if (seconds < 60) return 'just now';
+		const minutes = Math.floor(seconds / 60);
+		if (minutes < 60) return `${minutes}m ago`;
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return `${hours}h ago`;
+		const days = Math.floor(hours / 24);
+		return `${days}d ago`;
+	}
+
 	// Search state
 	let searchValue = $state('');
 
@@ -178,7 +190,7 @@
 		nodes={sitemapStore.nodes}
 		edges={sitemapStore.edges}
 		fitView
-		nodesDraggable={true}
+		nodesDraggable={!sitemapStore.isLayoutLocked}
 		selectionOnDrag
 		panOnDrag={[1, 2]}
 		selectionMode={SelectionMode.Partial}
@@ -321,6 +333,24 @@
 					Reset
 				</button>
 
+				<!-- Lock Toggle -->
+				<button
+					class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5
+					       {sitemapStore.isLayoutLocked ? 'bg-orange-100 hover:bg-orange-200 text-orange-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}"
+					onclick={() => sitemapStore.toggleLayoutLock()}
+					title={sitemapStore.isLayoutLocked ? 'Layout locked — click to unlock' : 'Layout unlocked — click to lock'}
+				>
+					{#if sitemapStore.isLayoutLocked}
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+						</svg>
+					{:else}
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+						</svg>
+					{/if}
+				</button>
+
 				<div class="w-px h-6 bg-gray-300"></div>
 
 				<!-- Search -->
@@ -377,6 +407,15 @@
 							{sitemapStore.progress.crawled} crawled, {sitemapStore.progress.screenshotted} screenshots
 						</span>
 					</div>
+				</div>
+			</Panel>
+		{/if}
+
+		<!-- Last arranged by indicator -->
+		{#if sitemapStore.layoutUpdatedBy}
+			<Panel position="bottom-right">
+				<div class="bg-white/80 backdrop-blur px-3 py-1.5 rounded-lg shadow text-xs text-gray-500">
+					Arranged by {sitemapStore.layoutUpdatedBy}{sitemapStore.layoutUpdatedAt ? `, ${timeAgo(sitemapStore.layoutUpdatedAt)}` : ''}
 				</div>
 			</Panel>
 		{/if}

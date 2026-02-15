@@ -62,6 +62,18 @@ if (document.readyState === 'loading') {
   initializeWidget();
 }
 
+// Watch for URL changes or DOM swaps that destroy the widget.
+// Works universally with any framework (Astro, Turbo, Livewire, etc.).
+let lastUrl = location.href;
+setInterval(() => {
+  const urlChanged = location.href !== lastUrl;
+  const widgetMissing = !document.querySelector('feedback-widget');
+  if (urlChanged || widgetMissing) {
+    lastUrl = location.href;
+    initializeWidget(); // has built-in duplicate check
+  }
+}, 500);
+
 // Export for manual usage
 export { FeedbackWidget } from './components/FeedbackWidget';
 export { FeedbackAPI, getAPI, resetAPI } from './api/supabase';

@@ -68,7 +68,10 @@
 				// Augment nodes with Supabase marker counts
 				let nodesWithFeedback = await loadSupabaseMarkerCounts(cached.nodes);
 
-				// Restore screenshots from IndexedDB cache
+				// Ensure server URLs are persisted to Supabase (before blob overwrite)
+				crawlCacheService.save(siteId, { nodes: nodesWithFeedback, edges: cached.edges });
+
+				// Restore screenshots from IndexedDB cache (replaces server URLs with local blobs)
 				nodesWithFeedback = await restoreScreenshotsFromCache(nodesWithFeedback);
 
 				sitemapStore.loadFromCache(nodesWithFeedback, cached.edges);

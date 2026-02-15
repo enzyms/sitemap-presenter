@@ -102,6 +102,21 @@ export interface ViewportInfo {
 }
 
 // ============================================================
+// Site Layout (shared node positions)
+// ============================================================
+
+export interface SiteLayout {
+  id: string;
+  site_id: string;
+  layout_mode: 'hierarchical' | 'radial';
+  positions: Record<string, { x: number; y: number }>;
+  is_locked: boolean;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+// ============================================================
 // Extended types with relations (for UI)
 // ============================================================
 

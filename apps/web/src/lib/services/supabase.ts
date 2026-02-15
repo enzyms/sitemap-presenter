@@ -26,5 +26,6 @@ export type {
 	CreateMarkerRequest,
 	CreateCommentRequest,
 	UpdateMarkerRequest,
-	SiteWithStats
+	SiteWithStats,
+	SiteLayout
 } from '@sitemap-presenter/shared';
