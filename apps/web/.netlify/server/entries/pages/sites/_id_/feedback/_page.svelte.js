@@ -1,313 +1,15 @@
-import { s as store_get, q as head, l as ensure_array_like, c as attr_class, a as attr, g as unsubscribe_stores } from "../../../../../chunks/index.js";
-import { o as onDestroy } from "../../../../../chunks/index-server.js";
-import "@sveltejs/kit/internal";
-import "../../../../../chunks/exports.js";
-import "../../../../../chunks/utils.js";
-import "@sveltejs/kit/internal/server";
-import "../../../../../chunks/state.svelte.js";
-import { d as derived, w as writable, g as get } from "../../../../../chunks/index2.js";
-import { g as getSupabase } from "../../../../../chunks/supabase.js";
-import { $ as escape_html } from "../../../../../chunks/context.js";
-function createFeedbackStore() {
-  const state = writable({
-    site: null,
-    markers: [],
-    loading: false,
-    error: null,
-    currentPagePath: null
-  });
-  let realtimeChannel = null;
-  const supabase = getSupabase();
-  const site = derived(state, ($state) => $state.site);
-  const markers = derived(state, ($state) => $state.markers);
-  const loading = derived(state, ($state) => $state.loading);
-  const error = derived(state, ($state) => $state.error);
-  const markersForCurrentPage = derived(state, ($state) => {
-    if (!$state.currentPagePath) return $state.markers;
-    return $state.markers.filter((m) => m.page_path === $state.currentPagePath);
-  });
-  const openCount = derived(markers, ($markers) => $markers.filter((m) => m.status === "open").length);
-  const resolvedCount = derived(
-    markers,
-    ($markers) => $markers.filter((m) => m.status === "resolved").length
-  );
-  async function initializeBySiteId(siteId) {
-    state.update((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const { data: siteData, error: siteError } = await supabase.from("sites").select("*").eq("id", siteId).single();
-      if (siteError) throw siteError;
-      state.update((s) => ({ ...s, site: siteData, loading: false }));
-      await loadMarkers();
-      subscribeToRealtime(siteId);
-      return true;
-    } catch (e) {
-      console.error("Failed to initialize site:", e);
-      state.update((s) => ({
-        ...s,
-        loading: false,
-        error: e instanceof Error ? e.message : "Failed to load site"
-      }));
-      return false;
-    }
-  }
-  async function initializeByApiKey(apiKey) {
-    state.update((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const { data: siteData, error: siteError } = await supabase.from("sites").select("*").eq("api_key", apiKey).single();
-      if (siteError) throw siteError;
-      state.update((s) => ({ ...s, site: siteData, loading: false }));
-      await loadMarkers();
-      subscribeToRealtime(siteData.id);
-      return true;
-    } catch (e) {
-      console.error("Failed to initialize site:", e);
-      state.update((s) => ({
-        ...s,
-        loading: false,
-        error: e instanceof Error ? e.message : "Failed to load site"
-      }));
-      return false;
-    }
-  }
-  async function loadMarkers(pagePath) {
-    const currentState = get(state);
-    if (!currentState.site) return;
-    state.update((s) => ({ ...s, loading: true, error: null }));
-    try {
-      let query = supabase.from("markers").select(
-        `
-					*,
-					comments (*)
-				`
-      ).eq("site_id", currentState.site.id).order("number", { ascending: true });
-      if (pagePath) {
-        query = query.eq("page_path", pagePath);
-      }
-      const { data, error: fetchError } = await query;
-      if (fetchError) throw fetchError;
-      const markersWithComments = (data || []).map((m) => ({
-        ...m,
-        comments: m.comments || []
-      }));
-      state.update((s) => ({
-        ...s,
-        markers: markersWithComments,
-        currentPagePath: pagePath || null,
-        loading: false
-      }));
-    } catch (e) {
-      console.error("Failed to load markers:", e);
-      state.update((s) => ({
-        ...s,
-        loading: false,
-        error: e instanceof Error ? e.message : "Failed to load markers"
-      }));
-    }
-  }
-  function setCurrentPage(pagePath) {
-    state.update((s) => ({ ...s, currentPagePath: pagePath }));
-  }
-  async function createMarker(data) {
-    const currentState = get(state);
-    if (!currentState.site) return null;
-    try {
-      const { data: numberData } = await supabase.rpc("get_next_marker_number", {
-        p_site_id: currentState.site.id,
-        p_page_path: data.page_path
-      });
-      const number = numberData || 1;
-      const { data: marker, error: createError } = await supabase.from("markers").insert({
-        site_id: currentState.site.id,
-        page_url: data.page_url,
-        page_path: data.page_path,
-        page_title: data.page_title || null,
-        number,
-        anchor: data.anchor,
-        fallback_position: data.fallback_position,
-        viewport: data.viewport,
-        status: "open"
-      }).select("*").single();
-      if (createError) throw createError;
-      let comments = [];
-      if (data.initial_comment) {
-        const { data: comment } = await supabase.from("comments").insert({
-          marker_id: marker.id,
-          content: data.initial_comment
-        }).select("*").single();
-        if (comment) {
-          comments = [comment];
-        }
-      }
-      const newMarker = {
-        ...marker,
-        comments
-      };
-      state.update((s) => ({
-        ...s,
-        markers: [...s.markers, newMarker]
-      }));
-      return newMarker;
-    } catch (e) {
-      console.error("Failed to create marker:", e);
-      return null;
-    }
-  }
-  async function updateMarkerStatus(markerId, status) {
-    const currentState = get(state);
-    if (!currentState.site) return false;
-    try {
-      const { error: updateError } = await supabase.from("markers").update({ status }).eq("id", markerId).eq("site_id", currentState.site.id);
-      if (updateError) throw updateError;
-      state.update((s) => ({
-        ...s,
-        markers: s.markers.map((m) => m.id === markerId ? { ...m, status } : m)
-      }));
-      return true;
-    } catch (e) {
-      console.error("Failed to update marker:", e);
-      return false;
-    }
-  }
-  async function deleteMarker(markerId) {
-    const currentState = get(state);
-    if (!currentState.site) return false;
-    try {
-      const { error: deleteError } = await supabase.from("markers").delete().eq("id", markerId).eq("site_id", currentState.site.id);
-      if (deleteError) throw deleteError;
-      state.update((s) => ({
-        ...s,
-        markers: s.markers.filter((m) => m.id !== markerId)
-      }));
-      return true;
-    } catch (e) {
-      console.error("Failed to delete marker:", e);
-      return false;
-    }
-  }
-  async function addComment(markerId, content, authorName) {
-    try {
-      const { data: comment, error: createError } = await supabase.from("comments").insert({
-        marker_id: markerId,
-        content,
-        author_name: authorName || null
-      }).select("*").single();
-      if (createError) throw createError;
-      state.update((s) => ({
-        ...s,
-        markers: s.markers.map((m) => {
-          if (m.id === markerId) {
-            return { ...m, comments: [...m.comments, comment] };
-          }
-          return m;
-        })
-      }));
-      return comment;
-    } catch (e) {
-      console.error("Failed to add comment:", e);
-      return null;
-    }
-  }
-  function subscribeToRealtime(siteId) {
-    if (realtimeChannel) {
-      supabase.removeChannel(realtimeChannel);
-    }
-    realtimeChannel = supabase.channel(`feedback-dashboard-${siteId}`).on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "markers",
-        filter: `site_id=eq.${siteId}`
-      },
-      (payload) => {
-        const eventType = payload.eventType;
-        const marker = payload.new;
-        const oldMarker = payload.old;
-        if (eventType === "INSERT" && marker) {
-          state.update((s) => {
-            if (s.markers.find((m) => m.id === marker.id)) return s;
-            return {
-              ...s,
-              markers: [...s.markers, { ...marker, comments: [] }]
-            };
-          });
-        } else if (eventType === "UPDATE" && marker) {
-          state.update((s) => ({
-            ...s,
-            markers: s.markers.map((m) => m.id === marker.id ? { ...m, ...marker } : m)
-          }));
-        } else if (eventType === "DELETE" && oldMarker) {
-          state.update((s) => ({
-            ...s,
-            markers: s.markers.filter((m) => m.id !== oldMarker.id)
-          }));
-        }
-      }
-    ).on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "comments"
-      },
-      (payload) => {
-        const comment = payload.new;
-        state.update((s) => ({
-          ...s,
-          markers: s.markers.map((m) => {
-            if (m.id === comment.marker_id) {
-              if (m.comments.find((c) => c.id === comment.id)) return m;
-              return { ...m, comments: [...m.comments, comment] };
-            }
-            return m;
-          })
-        }));
-      }
-    ).subscribe();
-  }
-  function destroy() {
-    if (realtimeChannel) {
-      supabase.removeChannel(realtimeChannel);
-      realtimeChannel = null;
-    }
-    state.set({
-      site: null,
-      markers: [],
-      loading: false,
-      error: null,
-      currentPagePath: null
-    });
-  }
-  function getMarker(markerId) {
-    return get(state).markers.find((m) => m.id === markerId);
-  }
-  return {
-    // Stores
-    subscribe: state.subscribe,
-    site,
-    markers,
-    loading,
-    error,
-    markersForCurrentPage,
-    openCount,
-    resolvedCount,
-    // Methods
-    initializeBySiteId,
-    initializeByApiKey,
-    loadMarkers,
-    setCurrentPage,
-    createMarker,
-    updateMarkerStatus,
-    deleteMarker,
-    addComment,
-    getMarker,
-    destroy
-  };
+import { s as store_get, h as head, e as ensure_array_like, a as attr_class, b as attr, c as unsubscribe_stores } from "../../../../../chunks/index.js";
+import { A as AppHeader, p as page } from "../../../../../chunks/AppHeader.js";
+import { _ as ssr_context, Z as escape_html } from "../../../../../chunks/context.js";
+import { f as feedbackStore } from "../../../../../chunks/feedback.js";
+function onDestroy(fn) {
+  /** @type {SSRContext} */
+  ssr_context.r.on_destroy(fn);
 }
-const feedbackStore = createFeedbackStore();
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;
+    let siteId = store_get($$store_subs ??= {}, "$page", page).params.id;
     const site = feedbackStore.site;
     const markers = feedbackStore.markers;
     const loading = feedbackStore.loading;
@@ -349,18 +51,19 @@ function _page($$renderer, $$props) {
         $$renderer4.push(`<title>${escape_html(store_get($$store_subs ??= {}, "$site", site)?.name || "Loading...")} - Feedback</title>`);
       });
     });
-    $$renderer2.push(`<div class="min-h-screen bg-gray-100"><header class="bg-white border-b border-gray-200 px-6 py-4"><div class="max-w-6xl mx-auto"><div class="flex items-center gap-4 mb-4"><a href="/sites" class="text-gray-500 hover:text-gray-700"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg></a> `);
-    if (store_get($$store_subs ??= {}, "$site", site)) {
+    $$renderer2.push(`<div class="min-h-screen bg-gray-100 flex flex-col">`);
+    AppHeader($$renderer2, {
+      siteName: store_get($$store_subs ??= {}, "$site", site)?.name,
+      siteId,
+      showNewSite: false
+    });
+    $$renderer2.push(`<!----> <div class="bg-white border-b border-gray-200 px-6 py-3"><div class="max-w-6xl mx-auto flex items-center gap-6">`);
+    if (store_get($$store_subs ??= {}, "$loading", loading)) {
       $$renderer2.push("<!--[-->");
-      $$renderer2.push(`<div><h1 class="text-xl font-bold text-gray-800">${escape_html(store_get($$store_subs ??= {}, "$site", site).name)}</h1> <p class="text-sm text-gray-500">${escape_html(store_get($$store_subs ??= {}, "$site", site).domain)}</p></div>`);
+      $$renderer2.push(`<div class="h-6 w-32 bg-gray-200 animate-pulse rounded"></div>`);
     } else {
       $$renderer2.push("<!--[!-->");
-      $$renderer2.push(`<div class="h-8 w-48 bg-gray-200 animate-pulse rounded"></div>`);
-    }
-    $$renderer2.push(`<!--]--></div> `);
-    if (!store_get($$store_subs ??= {}, "$loading", loading)) {
-      $$renderer2.push("<!--[-->");
-      $$renderer2.push(`<div class="flex items-center gap-6"><div class="flex items-center gap-2"><span class="text-2xl font-bold text-gray-800">${escape_html(store_get($$store_subs ??= {}, "$markers", markers).length)}</span> <span class="text-gray-500">total</span></div> `);
+      $$renderer2.push(`<div class="flex items-center gap-2"><span class="text-xl font-bold text-gray-800">${escape_html(store_get($$store_subs ??= {}, "$markers", markers).length)}</span> <span class="text-gray-500">total markers</span></div> `);
       if (store_get($$store_subs ??= {}, "$openCount", openCount) > 0) {
         $$renderer2.push("<!--[-->");
         $$renderer2.push(`<div class="flex items-center gap-2"><span class="w-3 h-3 bg-orange-500 rounded-full"></span> <span class="text-gray-700 font-medium">${escape_html(store_get($$store_subs ??= {}, "$openCount", openCount))} open</span></div>`);
@@ -374,11 +77,9 @@ function _page($$renderer, $$props) {
       } else {
         $$renderer2.push("<!--[!-->");
       }
-      $$renderer2.push(`<!--]--></div>`);
-    } else {
-      $$renderer2.push("<!--[!-->");
+      $$renderer2.push(`<!--]-->`);
     }
-    $$renderer2.push(`<!--]--></div></header> <main class="max-w-6xl mx-auto px-6 py-8">`);
+    $$renderer2.push(`<!--]--></div></div> <main class="max-w-6xl mx-auto px-6 py-8">`);
     if (store_get($$store_subs ??= {}, "$error", error)) {
       $$renderer2.push("<!--[-->");
       $$renderer2.push(`<div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">${escape_html(store_get($$store_subs ??= {}, "$error", error))}</div>`);

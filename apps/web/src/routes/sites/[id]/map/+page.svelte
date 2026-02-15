@@ -3,9 +3,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import AppHeader from '$lib/components/ui/AppHeader.svelte';
 	import SitemapCanvas from '$lib/components/canvas/SitemapCanvas.svelte';
-	import ConfigPanel from '$lib/components/ui/ConfigPanel.svelte';
-	import ProgressBar from '$lib/components/ui/ProgressBar.svelte';
-	import SearchBar from '$lib/components/ui/SearchBar.svelte';
 	import PageViewer from '$lib/components/viewer/PageViewer.svelte';
 	import { sitemapStore } from '$lib/stores/sitemap';
 	import { configStore } from '$lib/stores/config';
@@ -14,7 +11,6 @@
 	import { screenshotCache } from '$lib/services/screenshotCache';
 	import type { PageNode, FeedbackStats } from '$lib/types';
 
-	const CONFIG_PANEL_KEY = 'sitemap-presenter-config-panel';
 	const SITEMAP_CACHE_PREFIX = 'sitemap-cache-';
 
 	let siteId = $derived($page.params.id);
@@ -26,7 +22,6 @@
 	const zoomLevel = sitemapStore.zoomLevel;
 
 	let hasNodes = $derived($nodes.length > 0);
-	let showConfig = $state(true);
 
 	// Load site from Supabase
 	async function loadSite() {
@@ -66,6 +61,9 @@
 	// Load cached sitemap from localStorage
 	async function loadCachedSitemap() {
 		try {
+			// Set siteId first so positions can be loaded
+			sitemapStore.setSiteId(siteId);
+
 			const cached = localStorage.getItem(`${SITEMAP_CACHE_PREFIX}${siteId}`);
 			if (cached) {
 				const data = JSON.parse(cached);
@@ -184,15 +182,6 @@
 		}
 	}
 
-	function toggleConfig() {
-		showConfig = !showConfig;
-		try {
-			localStorage.setItem(CONFIG_PANEL_KEY, JSON.stringify(showConfig));
-		} catch (e) {
-			console.error('Failed to save config panel state:', e);
-		}
-	}
-
 	// Save cache when nodes change
 	$effect(() => {
 		if ($nodes.length > 0 && site) {
@@ -201,16 +190,6 @@
 	});
 
 	onMount(() => {
-		// Load config panel state
-		try {
-			const savedConfig = localStorage.getItem(CONFIG_PANEL_KEY);
-			if (savedConfig !== null) {
-				showConfig = JSON.parse(savedConfig);
-			}
-		} catch (e) {
-			console.error('Failed to load config panel state:', e);
-		}
-
 		// Initialize screenshot cache and clear old entries
 		screenshotCache.init().then(() => {
 			screenshotCache.clearOldCache(7).then((deleted) => {
@@ -254,67 +233,8 @@
 		<main class="flex-1 relative overflow-hidden">
 			<!-- Canvas -->
 			<div class="absolute inset-0">
-				{#if hasNodes}
-					<SitemapCanvas />
-				{:else}
-					<!-- Empty state -->
-					<div class="w-full h-full flex items-center justify-center bg-gray-50">
-						<div class="text-center max-w-md">
-							<svg
-								class="w-24 h-24 mx-auto text-gray-300 mb-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="1.5"
-									d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
-								/>
-							</svg>
-							<h2 class="text-xl font-medium text-gray-600 mb-2">No sitemap yet</h2>
-							<p class="text-gray-400 mb-4">Use the crawl panel to map your website</p>
-							{#if !showConfig}
-								<button
-									onclick={toggleConfig}
-									class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
-								>
-									Open Crawl Panel
-								</button>
-							{/if}
-						</div>
-					</div>
-				{/if}
+				<SitemapCanvas {siteId} />
 			</div>
-
-			<!-- Left sidebar - Config panel -->
-			<div class="absolute top-4 left-4 z-10 space-y-4">
-				{#if showConfig}
-					<div class="transform transition-all duration-300 ease-out origin-top">
-						<ConfigPanel onClose={toggleConfig} siteId={siteId} />
-					</div>
-				{:else}
-					<button
-						onclick={toggleConfig}
-						class="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow border border-gray-200 text-sm font-medium text-gray-700"
-					>
-						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-						</svg>
-						Crawl Settings
-					</button>
-				{/if}
-				<ProgressBar />
-			</div>
-
-			<!-- Top right - Search bar -->
-			{#if hasNodes}
-				<div class="absolute top-4 right-4 z-10">
-					<SearchBar />
-				</div>
-			{/if}
 
 			<!-- Zoom level indicator -->
 			{#if hasNodes}

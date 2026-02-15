@@ -1,39 +1,5 @@
 import { B as BROWSER } from "./false.js";
-var is_array = Array.isArray;
-var index_of = Array.prototype.indexOf;
-var includes = Array.prototype.includes;
-var array_from = Array.from;
-var define_property = Object.defineProperty;
-var get_descriptor = Object.getOwnPropertyDescriptor;
-var object_prototype = Object.prototype;
-var array_prototype = Array.prototype;
-var get_prototype_of = Object.getPrototypeOf;
-var is_extensible = Object.isExtensible;
-const noop = () => {
-};
-function run_all(arr) {
-  for (var i = 0; i < arr.length; i++) {
-    arr[i]();
-  }
-}
-function deferred() {
-  var resolve;
-  var reject;
-  var promise = new Promise((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-function fallback(value, fallback2, lazy = false) {
-  return value === void 0 ? lazy ? (
-    /** @type {() => V} */
-    fallback2()
-  ) : (
-    /** @type {V} */
-    fallback2
-  ) : value;
-}
+import { r as run_all, b as deferred, i as includes, o as object_prototype, c as array_prototype, g as get_descriptor, e as get_prototype_of, f as is_array, h as is_extensible, j as index_of, n as noop } from "./utils2.js";
 function equals(value) {
   return value === this.v;
 }
@@ -1809,9 +1775,6 @@ function setContext(key, context) {
   get_or_init_context_map().set(key, context);
   return context;
 }
-function hasContext(key) {
-  return get_or_init_context_map().has(key);
-}
 function get_or_init_context_map(name) {
   if (ssr_context === null) {
     lifecycle_outside_component();
@@ -1837,7 +1800,7 @@ function get_parent_context(ssr_context2) {
   return null;
 }
 export {
-  escape_html as $,
+  safe_not_equal as $,
   internal_set as A,
   Batch as B,
   COMMENT_NODE as C,
@@ -1849,37 +1812,31 @@ export {
   EFFECT_TRANSPARENT as I,
   EFFECT_PRESERVED as J,
   BOUNDARY_EFFECT as K,
-  define_property as L,
+  init_operations as L,
   MAYBE_DIRTY as M,
-  init_operations as N,
-  get_first_child as O,
-  hydration_failed as P,
-  clear_text_content as Q,
-  array_from as R,
-  component_root as S,
-  push$1 as T,
-  pop$1 as U,
-  set as V,
-  LEGACY_PROPS as W,
-  flushSync as X,
-  mutable_source as Y,
-  setContext as Z,
-  getContext as _,
+  get_first_child as N,
+  hydration_failed as O,
+  clear_text_content as P,
+  component_root as Q,
+  push$1 as R,
+  pop$1 as S,
+  set as T,
+  LEGACY_PROPS as U,
+  flushSync as V,
+  mutable_source as W,
+  setContext as X,
+  getContext as Y,
+  escape_html as Z,
+  ssr_context as _,
   HYDRATION_END as a,
-  fallback as a0,
-  hasContext as a1,
-  noop as a2,
-  ssr_context as a3,
-  safe_not_equal as a4,
-  subscribe_to_store as a5,
-  run_all as a6,
-  STALE_REACTION as a7,
-  set_ssr_context as a8,
-  push as a9,
-  pop as aa,
-  ELEMENT_PRESERVE_ATTRIBUTE_CASE as ab,
-  ELEMENT_IS_INPUT as ac,
-  ELEMENT_IS_NAMESPACED as ad,
+  subscribe_to_store as a0,
+  STALE_REACTION as a1,
+  set_ssr_context as a2,
+  push as a3,
+  pop as a4,
+  ELEMENT_PRESERVE_ATTRIBUTE_CASE as a5,
+  ELEMENT_IS_INPUT as a6,
+  ELEMENT_IS_NAMESPACED as a7,
   HYDRATION_START as b,
   HYDRATION_START_ELSE as c,
   get as d,

@@ -5,15 +5,34 @@
 		MiniMap,
 		Background,
 		BackgroundVariant,
+		Panel,
 		MarkerType,
+		useSvelteFlow,
 		type NodeTypes,
 		type EdgeTypes
 	} from '@xyflow/svelte';
 	import '@xyflow/svelte/dist/style.css';
+	import { onMount } from 'svelte';
 
 	import PageNode from './PageNode.svelte';
 	import LinkEdge from './LinkEdge.svelte';
 	import { sitemapStore } from '$lib/stores/sitemap';
+	import { configStore } from '$lib/stores/config';
+	import { apiService } from '$lib/services/api';
+	import { socketService } from '$lib/services/socket';
+
+	interface Props {
+		siteId?: string;
+	}
+
+	let { siteId }: Props = $props();
+
+	// Set site ID for position storage
+	onMount(() => {
+		if (siteId) {
+			sitemapStore.setSiteId(siteId);
+		}
+	});
 
 	// Cast to any to avoid Svelte 4/5 component type mismatch
 	const nodeTypes: NodeTypes = {
@@ -26,23 +45,57 @@
 
 	const nodes = sitemapStore.nodes;
 	const edges = sitemapStore.edges;
+	const layoutMode = sitemapStore.layoutMode;
+	const progress = sitemapStore.progress;
+	const config = configStore;
 
-	function handleViewportChange(event: CustomEvent) {
-		const viewport = event.detail.viewport;
-		if (viewport?.zoom !== undefined) {
-			sitemapStore.setZoomLevel(viewport.zoom);
+	// Search state
+	let searchValue = $state('');
+	const filteredNodes = sitemapStore.filteredNodes;
+
+	// Crawl settings popover
+	let showCrawlSettings = $state(false);
+	let isLoading = $state(false);
+	let crawlError = $state('');
+
+	let isCrawling = $derived($progress.status === 'crawling' || $progress.status === 'screenshotting');
+	let resultCount = $derived($filteredNodes.length);
+	let totalCount = $derived($nodes.length);
+	let showSearchResults = $derived(searchValue.length > 0 && totalCount > 0);
+
+	function handleViewportChange(event: { viewport: { zoom?: number } }) {
+		if (event.viewport?.zoom !== undefined) {
+			sitemapStore.setZoomLevel(event.viewport.zoom);
 		}
 	}
 
-	function handleNodeClick(event: CustomEvent) {
-		const nodeId = event.detail.node?.id;
-		if (nodeId) {
-			sitemapStore.selectNode(nodeId);
+	function handleNodeClick(event: { node: { id: string } }) {
+		if (event.node?.id) {
+			sitemapStore.selectNode(event.node.id);
 		}
 	}
 
 	function handlePaneClick() {
 		sitemapStore.selectNode(null);
+		showCrawlSettings = false;
+	}
+
+	// Handle node drag - log all drag events to debug
+	function handleNodeDrag(event: { targetNode: { id: string; position: { x: number; y: number } } }) {
+		console.log('[SitemapCanvas] nodedrag:', event.targetNode?.id, event.targetNode?.position);
+	}
+
+	function handleNodeDragStart(event: { targetNode: { id: string; position: { x: number; y: number } } }) {
+		console.log('[SitemapCanvas] nodedragstart:', event.targetNode?.id);
+	}
+
+	// Handle node drag stop - save positions after drag
+	function handleNodeDragStop(event: { targetNode: { id: string; position: { x: number; y: number } } }) {
+		console.log('[SitemapCanvas] nodedragstop:', event);
+		if (event.targetNode?.id && event.targetNode?.position) {
+			console.log('[SitemapCanvas] Saving position for', event.targetNode.id);
+			sitemapStore.onNodeDragStop(event.targetNode.id, event.targetNode.position);
+		}
 	}
 
 	function getNodeColor(node: { data?: { depth?: number } }): string {
@@ -50,15 +103,83 @@
 		const colors = ['#3b82f6', '#22c55e', '#eab308', '#f97316', '#ef4444'];
 		return colors[Math.min(depth, colors.length - 1)];
 	}
+
+	// Search handlers
+	function handleSearchInput(event: Event) {
+		const target = event.target as HTMLInputElement;
+		searchValue = target.value;
+		sitemapStore.setSearchQuery(target.value);
+	}
+
+	function handleClearSearch() {
+		searchValue = '';
+		sitemapStore.setSearchQuery('');
+	}
+
+	// Crawl handlers
+	function handleUrlChange(event: Event) {
+		const target = event.target as HTMLInputElement;
+		configStore.setUrl(target.value);
+	}
+
+	function handleMaxDepthChange(event: Event) {
+		const target = event.target as HTMLInputElement;
+		configStore.setMaxDepth(parseInt(target.value, 10));
+	}
+
+	function handleMaxPagesChange(event: Event) {
+		const target = event.target as HTMLInputElement;
+		configStore.setMaxPages(parseInt(target.value, 10));
+	}
+
+	async function handleStartCrawl() {
+		crawlError = '';
+
+		try {
+			new URL($config.url);
+		} catch {
+			crawlError = 'Please enter a valid URL';
+			return;
+		}
+
+		isLoading = true;
+		sitemapStore.reset();
+
+		try {
+			const response = await apiService.startCrawl($config);
+			sitemapStore.setSessionId(response.sessionId);
+			sitemapStore.setStatus('crawling');
+			socketService.connect(response.sessionId, siteId);
+			showCrawlSettings = false;
+		} catch (err) {
+			crawlError = err instanceof Error ? err.message : 'Failed to start crawl';
+			sitemapStore.setStatus('error');
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	async function handleCancelCrawl() {
+		if ($progress.sessionId) {
+			try {
+				await apiService.cancelCrawl($progress.sessionId);
+				socketService.disconnect();
+				sitemapStore.setStatus('idle');
+			} catch (err) {
+				console.error('Failed to cancel crawl:', err);
+			}
+		}
+	}
 </script>
 
 <div class="w-full h-full">
 	<SvelteFlow
 		{nodeTypes}
 		{edgeTypes}
-		{nodes}
-		{edges}
+		nodes={$nodes}
+		edges={$edges}
 		fitView
+		nodesDraggable={true}
 		defaultEdgeOptions={{
 			type: 'smoothstep',
 			animated: false,
@@ -69,10 +190,195 @@
 		}}
 		minZoom={0.1}
 		maxZoom={2}
-		on:nodeclick={handleNodeClick}
-		on:paneclick={handlePaneClick}
-		on:viewportchange={handleViewportChange}
+		onnodeclick={handleNodeClick}
+		onpaneclick={handlePaneClick}
+		onviewportchange={handleViewportChange}
+		onnodedragstart={handleNodeDragStart}
+		onnodedrag={handleNodeDrag}
+		onnodedragstop={handleNodeDragStop}
 	>
+		<!-- Unified Action Bar -->
+		<Panel position="top-center">
+			<div
+				class="flex items-center gap-2 bg-white/95 backdrop-blur rounded-lg shadow-lg p-2 border border-gray-200"
+			>
+				<!-- Crawl Section -->
+				<div class="relative">
+					{#if isCrawling}
+						<button
+							class="px-3 py-1.5 rounded-md bg-red-100 hover:bg-red-200 text-red-700 text-sm font-medium transition-colors flex items-center gap-1.5"
+							onclick={handleCancelCrawl}
+							title="Cancel crawl"
+						>
+							<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+							</svg>
+							Cancel
+						</button>
+					{:else}
+						<button
+							class="px-3 py-1.5 rounded-md bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium transition-colors flex items-center gap-1.5"
+							onclick={() => (showCrawlSettings = !showCrawlSettings)}
+							title="Crawl settings"
+						>
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+							</svg>
+							Crawl
+						</button>
+					{/if}
+
+					<!-- Crawl Settings Dropdown -->
+					{#if showCrawlSettings}
+						<div class="absolute top-full left-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
+							<div class="space-y-3">
+								<div>
+									<label class="block text-xs font-medium text-gray-600 mb-1">Website URL</label>
+									<input
+										type="url"
+										value={$config.url}
+										oninput={handleUrlChange}
+										placeholder="https://example.com"
+										class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-xs font-medium text-gray-600 mb-1">
+										Max Depth: {$config.maxDepth}
+									</label>
+									<input
+										type="range"
+										value={$config.maxDepth}
+										oninput={handleMaxDepthChange}
+										min="1"
+										max="5"
+										class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-xs font-medium text-gray-600 mb-1">
+										Max Pages: {$config.maxPages}
+									</label>
+									<input
+										type="range"
+										value={$config.maxPages}
+										oninput={handleMaxPagesChange}
+										min="3"
+										max="500"
+										class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+									/>
+								</div>
+
+								{#if crawlError}
+									<p class="text-xs text-red-600">{crawlError}</p>
+								{/if}
+
+								<button
+									onclick={handleStartCrawl}
+									disabled={isLoading || !$config.url}
+									class="w-full px-3 py-2 bg-orange-500 text-white text-sm font-medium rounded hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								>
+									{isLoading ? 'Starting...' : 'Start Crawl'}
+								</button>
+							</div>
+						</div>
+					{/if}
+				</div>
+
+				<div class="w-px h-6 bg-gray-300"></div>
+
+				<!-- Layout Mode Toggle -->
+				<select
+					class="px-3 py-1.5 rounded-md border border-gray-300 text-sm bg-white cursor-pointer
+					       hover:border-gray-400 focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+					value={$layoutMode}
+					onchange={(e) => sitemapStore.setLayoutMode(e.currentTarget.value as 'hierarchical' | 'radial')}
+				>
+					<option value="hierarchical">Rows</option>
+					<option value="radial">Circular</option>
+				</select>
+
+				<!-- Reset Button -->
+				<button
+					class="px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-sm font-medium
+					       transition-colors flex items-center gap-1.5"
+					onclick={() => sitemapStore.resetLayout()}
+					title="Reset layout to default (expand all, auto-position)"
+				>
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+						/>
+					</svg>
+					Reset
+				</button>
+
+				<div class="w-px h-6 bg-gray-300"></div>
+
+				<!-- Search -->
+				<div class="relative">
+					<svg
+						class="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+						/>
+					</svg>
+					<input
+						type="text"
+						value={searchValue}
+						oninput={handleSearchInput}
+						placeholder="Search..."
+						class="w-40 pl-8 pr-6 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-orange-500"
+					/>
+					{#if searchValue}
+						<button
+							onclick={handleClearSearch}
+							class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+						>
+							<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					{/if}
+					{#if showSearchResults}
+						<div class="absolute top-full left-0 mt-1 px-2 py-0.5 bg-gray-800 text-white text-xs rounded">
+							{resultCount}/{totalCount}
+						</div>
+					{/if}
+				</div>
+			</div>
+		</Panel>
+
+		<!-- Progress indicator -->
+		{#if isCrawling}
+			<Panel position="top-left">
+				<div class="bg-white/95 backdrop-blur rounded-lg shadow-lg p-3 border border-gray-200 text-sm">
+					<div class="flex items-center gap-2 text-gray-600">
+						<svg class="w-4 h-4 animate-spin text-orange-500" fill="none" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						</svg>
+						<span>
+							{$progress.crawled} crawled, {$progress.screenshotted} screenshots
+						</span>
+					</div>
+				</div>
+			</Panel>
+		{/if}
+
 		<Controls />
 		<MiniMap nodeColor={getNodeColor} maskColor="rgb(0, 0, 0, 0.1)" />
 		<Background variant={BackgroundVariant.Dots} gap={20} size={1} />

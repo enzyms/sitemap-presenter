@@ -77,6 +77,10 @@ class SocketService {
 			console.log('Crawl complete:', data);
 			sitemapStore.setStatus('complete');
 
+			// Apply URL path hierarchy to reorganize nodes/edges
+			sitemapStore.applyUrlHierarchy();
+			console.log('Applied URL hierarchy');
+
 			// Save to current project cache if a project is selected
 			const currentProjectId = get(projectsStore.currentProjectId);
 			if (currentProjectId) {

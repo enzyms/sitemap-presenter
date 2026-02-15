@@ -1,5 +1,6 @@
-import { $ as escape_html, b as HYDRATION_START, a as HYDRATION_END, a7 as STALE_REACTION, a8 as set_ssr_context, a2 as noop, a3 as ssr_context, a9 as push, aa as pop, a5 as subscribe_to_store, ab as ELEMENT_PRESERVE_ATTRIBUTE_CASE, ac as ELEMENT_IS_INPUT, ad as ELEMENT_IS_NAMESPACED } from "./context.js";
-import { i as is_primitive, g as get_type, D as DevalueError, a as is_plain_object, e as enumerable_symbols, s as stringify_key, b as stringify_string, c as escaped } from "./utils2.js";
+import { Z as escape_html, b as HYDRATION_START, a as HYDRATION_END, a1 as STALE_REACTION, a2 as set_ssr_context, _ as ssr_context, a3 as push, a4 as pop, a0 as subscribe_to_store, a5 as ELEMENT_PRESERVE_ATTRIBUTE_CASE, a6 as ELEMENT_IS_INPUT, a7 as ELEMENT_IS_NAMESPACED } from "./context.js";
+import { n as noop } from "./utils2.js";
+import { i as is_primitive, g as get_type, D as DevalueError, a as is_plain_object, e as enumerable_symbols, s as stringify_key, b as stringify_string, c as escaped } from "./utils3.js";
 const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_$";
 const unsafe_chars = /[<\b\f\n\r\t\0\u2028\u2029]/g;
 const reserved = /^(?:do|if|in|for|int|let|new|try|var|byte|case|char|else|enum|goto|long|this|void|with|await|break|catch|class|const|final|float|short|super|throw|while|yield|delete|double|export|import|native|return|switch|throws|typeof|boolean|default|extends|finally|package|private|abstract|continue|debugger|function|volatile|interface|protected|transient|implements|instanceof|synchronized)$/;
@@ -1208,32 +1209,12 @@ function attributes(attrs, css_hash, classes, styles, flags = 0) {
   }
   return attr_str;
 }
-function spread_props(props) {
-  const merged_props = {};
-  let key;
-  for (let i = 0; i < props.length; i++) {
-    const obj = props[i];
-    for (key in obj) {
-      const desc = Object.getOwnPropertyDescriptor(obj, key);
-      if (desc) {
-        Object.defineProperty(merged_props, key, desc);
-      } else {
-        merged_props[key] = obj[key];
-      }
-    }
-  }
-  return merged_props;
-}
 function stringify(value) {
   return typeof value === "string" ? value : value == null ? "" : value + "";
 }
 function attr_class(value, hash, directives) {
   var result = to_class(value, hash, directives);
   return result ? ` class="${escape_html(result, true)}"` : "";
-}
-function attr_style(value, directives) {
-  var result = to_style(value, directives);
-  return result ? ` style="${escape_html(result, true)}"` : "";
 }
 function store_get(store_values, store_name, store) {
   if (store_name in store_values && store_values[store_name][0] === store) {
@@ -1249,53 +1230,9 @@ function store_get(store_values, store_name, store) {
   store_values[store_name][1] = unsub;
   return store_values[store_name][2];
 }
-function store_set(store, value) {
-  store.set(value);
-  return value;
-}
 function unsubscribe_stores(store_values) {
   for (const store_name in store_values) {
     store_values[store_name][1]();
-  }
-}
-function slot(renderer, $$props, name, slot_props, fallback_fn) {
-  var slot_fn = $$props.$$slots?.[name];
-  if (slot_fn === true) {
-    slot_fn = $$props[name === "default" ? "children" : name];
-  }
-  if (slot_fn !== void 0) {
-    slot_fn(renderer, slot_props);
-  }
-}
-function rest_props(props, rest) {
-  const rest_props2 = {};
-  let key;
-  for (key in props) {
-    if (!rest.includes(key)) {
-      rest_props2[key] = props[key];
-    }
-  }
-  return rest_props2;
-}
-function sanitize_props(props) {
-  const { children, $$slots, ...sanitized } = props;
-  return sanitized;
-}
-function sanitize_slots(props) {
-  const sanitized = {};
-  if (props.children) sanitized.default = true;
-  for (const key in props.$$slots) {
-    sanitized[key] = true;
-  }
-  return sanitized;
-}
-function bind_props(props_parent, props_now) {
-  for (const key in props_now) {
-    const initial_value = props_parent[key];
-    const value = props_now[key];
-    if (initial_value === void 0 && value !== void 0 && Object.getOwnPropertyDescriptor(props_parent, key)?.set) {
-      props_parent[key] = value;
-    }
   }
 }
 function ensure_array_like(array_like_or_iterator) {
@@ -1305,23 +1242,13 @@ function ensure_array_like(array_like_or_iterator) {
   return [];
 }
 export {
-  attr as a,
-  stringify as b,
-  attr_class as c,
-  clsx as d,
-  attr_style as e,
-  slot as f,
-  unsubscribe_stores as g,
-  bind_props as h,
+  attr_class as a,
+  attr as b,
+  unsubscribe_stores as c,
+  stringify as d,
+  ensure_array_like as e,
+  head as h,
   is_passive_event as i,
-  sanitize_props as j,
-  rest_props as k,
-  ensure_array_like as l,
-  spread_props as m,
-  store_set as n,
-  attributes as o,
-  sanitize_slots as p,
-  head as q,
   render as r,
   store_get as s,
   uneval as u

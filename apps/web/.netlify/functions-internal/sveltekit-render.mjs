@@ -9,16 +9,19 @@ function __memo(fn) {
 return {
 	appDir: "_app",
 	appPath: "_app",
-	assets: new Set(["favicon.png","widget/widget.js"]),
+	assets: new Set(["favicon.png","widget/widget.js","widget.js"]),
 	mimeTypes: {".png":"image/png",".js":"text/javascript"},
 	_: {
-		client: {start:"_app/immutable/entry/start.351zyK8m.js",app:"_app/immutable/entry/app.CwyrwViv.js",imports:["_app/immutable/entry/start.351zyK8m.js","_app/immutable/chunks/DvH0qfh5.js","_app/immutable/chunks/DQwv52WA.js","_app/immutable/chunks/BFHQo9yt.js","_app/immutable/chunks/Z1-nxOsN.js","_app/immutable/entry/app.CwyrwViv.js","_app/immutable/chunks/DQwv52WA.js","_app/immutable/chunks/C5VthK-H.js","_app/immutable/chunks/CmwIBMnq.js","_app/immutable/chunks/Z1-nxOsN.js","_app/immutable/chunks/ZpYGP8cY.js","_app/immutable/chunks/-FjUDsfB.js","_app/immutable/chunks/jaElYFwA.js","_app/immutable/chunks/Di2gU2k3.js","_app/immutable/chunks/BFHQo9yt.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
+		client: {start:"_app/immutable/entry/start.BWKiJlQU.js",app:"_app/immutable/entry/app.CzermNQu.js",imports:["_app/immutable/entry/start.BWKiJlQU.js","_app/immutable/chunks/DEWfprcg.js","_app/immutable/chunks/De8nCeAn.js","_app/immutable/chunks/BTm1wTkT.js","_app/immutable/entry/app.CzermNQu.js","_app/immutable/chunks/De8nCeAn.js","_app/immutable/chunks/DyAFWKsM.js","_app/immutable/chunks/Bgvzfm-y.js","_app/immutable/chunks/BTm1wTkT.js","_app/immutable/chunks/D31fIeEI.js","_app/immutable/chunks/vXkExHKf.js","_app/immutable/chunks/Cb9o6PuH.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
 		nodes: [
 			__memo(() => import('../server/nodes/0.js')),
 			__memo(() => import('../server/nodes/1.js')),
 			__memo(() => import('../server/nodes/2.js')),
 			__memo(() => import('../server/nodes/3.js')),
-			__memo(() => import('../server/nodes/4.js'))
+			__memo(() => import('../server/nodes/4.js')),
+			__memo(() => import('../server/nodes/5.js')),
+			__memo(() => import('../server/nodes/6.js')),
+			__memo(() => import('../server/nodes/7.js'))
 		],
 		remotes: {
 			
@@ -39,10 +42,31 @@ return {
 				endpoint: null
 			},
 			{
+				id: "/sites/new",
+				pattern: /^\/sites\/new\/?$/,
+				params: [],
+				page: { layouts: [0,], errors: [1,], leaf: 7 },
+				endpoint: null
+			},
+			{
 				id: "/sites/[id]/feedback",
 				pattern: /^\/sites\/([^/]+?)\/feedback\/?$/,
 				params: [{"name":"id","optional":false,"rest":false,"chained":false}],
 				page: { layouts: [0,], errors: [1,], leaf: 4 },
+				endpoint: null
+			},
+			{
+				id: "/sites/[id]/map",
+				pattern: /^\/sites\/([^/]+?)\/map\/?$/,
+				params: [{"name":"id","optional":false,"rest":false,"chained":false}],
+				page: { layouts: [0,], errors: [1,], leaf: 5 },
+				endpoint: null
+			},
+			{
+				id: "/sites/[id]/settings",
+				pattern: /^\/sites\/([^/]+?)\/settings\/?$/,
+				params: [{"name":"id","optional":false,"rest":false,"chained":false}],
+				page: { layouts: [0,], errors: [1,], leaf: 6 },
 				endpoint: null
 			}
 		],

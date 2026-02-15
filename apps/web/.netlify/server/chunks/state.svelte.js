@@ -1,4 +1,4 @@
-import { a2 as noop } from "./context.js";
+import { n as noop } from "./utils2.js";
 import "@sveltejs/kit/internal/server";
 const is_legacy = noop.toString().includes("$$") || /function \w+\(\) \{\}/.test(noop.toString());
 if (is_legacy) {

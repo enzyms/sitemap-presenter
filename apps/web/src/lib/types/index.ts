@@ -22,6 +22,7 @@ export interface PageData extends Record<string, unknown> {
 	statusCode?: number;
 	error?: string;
 	feedbackStats?: FeedbackStats;
+	isExpanded?: boolean; // Track if children are visible (default: true)
 }
 
 export type PageNode = Node<PageData, 'page'>;

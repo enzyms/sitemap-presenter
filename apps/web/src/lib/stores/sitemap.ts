@@ -1,5 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import type { PageNode, LinkEdge, CrawlProgress, PageDiscoveredEvent, PageScreenshotEvent } from '$lib/types';
+import { applyLayout, reorganizeByUrlHierarchy, type LayoutMode } from '$lib/services/layoutEngine';
+import type { Edge } from '@xyflow/svelte';
 
 const defaultProgress: CrawlProgress = {
 	sessionId: '',
@@ -10,6 +12,11 @@ const defaultProgress: CrawlProgress = {
 	errors: 0
 };
 
+import { browser } from '$app/environment';
+
+const POSITIONS_STORAGE_KEY = 'sitemap-node-positions';
+const LAYOUT_MODE_STORAGE_KEY = 'sitemap-layout-mode';
+
 function createSitemapStore() {
 	const nodes = writable<PageNode[]>([]);
 	const edges = writable<LinkEdge[]>([]);
@@ -18,8 +25,97 @@ function createSitemapStore() {
 	const searchQuery = writable<string>('');
 	const zoomLevel = writable<number>(1);
 
+	// Load saved layout mode from localStorage (only in browser)
+	const savedLayoutMode = browser
+		? localStorage.getItem(LAYOUT_MODE_STORAGE_KEY) as LayoutMode | null
+		: null;
+	const layoutMode = writable<LayoutMode>(savedLayoutMode || 'hierarchical');
+
 	// URL to node ID mapping
 	const urlToNodeId = new Map<string, string>();
+
+	// Track manually positioned nodes and their positions
+	const manuallyPositioned = new Set<string>();
+
+	// Current site ID for position storage
+	let currentSiteId: string | null = null;
+
+	// Set current site ID for position storage
+	function setSiteId(siteId: string) {
+		currentSiteId = siteId;
+	}
+
+	// Save node positions to localStorage (per layout mode)
+	function savePositions() {
+		if (!browser || !currentSiteId) {
+			console.log('[savePositions] Skip - browser:', browser, 'siteId:', currentSiteId);
+			return;
+		}
+
+		const currentNodes = get(nodes);
+		const mode = get(layoutMode);
+		const positions: Record<string, { x: number; y: number }> = {};
+
+		for (const node of currentNodes) {
+			positions[node.id] = node.position;
+		}
+
+		try {
+			const key = `${POSITIONS_STORAGE_KEY}-${currentSiteId}-${mode}`;
+			localStorage.setItem(key, JSON.stringify(positions));
+			console.log('[savePositions] Saved', Object.keys(positions).length, 'positions to', key);
+		} catch (e) {
+			console.error('Failed to save node positions:', e);
+		}
+	}
+
+	// Load node positions from localStorage (for specific layout mode)
+	function loadPositions(mode?: LayoutMode): Record<string, { x: number; y: number }> | null {
+		if (!browser || !currentSiteId) {
+			console.log('[loadPositions] Skip - browser:', browser, 'siteId:', currentSiteId);
+			return null;
+		}
+
+		const targetMode = mode || get(layoutMode);
+		try {
+			const key = `${POSITIONS_STORAGE_KEY}-${currentSiteId}-${targetMode}`;
+			const saved = localStorage.getItem(key);
+			console.log('[loadPositions] Key:', key, 'Found:', !!saved);
+			if (saved) {
+				const parsed = JSON.parse(saved);
+				console.log('[loadPositions] Loaded', Object.keys(parsed).length, 'positions');
+				return parsed;
+			}
+		} catch (e) {
+			console.error('Failed to load node positions:', e);
+		}
+		return null;
+	}
+
+	// Clear saved positions for current layout mode
+	function clearSavedPositions() {
+		if (!browser || !currentSiteId) return;
+
+		const mode = get(layoutMode);
+		try {
+			const key = `${POSITIONS_STORAGE_KEY}-${currentSiteId}-${mode}`;
+			localStorage.removeItem(key);
+		} catch (e) {
+			console.error('Failed to clear node positions:', e);
+		}
+	}
+
+	// Clear saved positions for all layout modes
+	function clearAllSavedPositions() {
+		if (!browser || !currentSiteId) return;
+
+		try {
+			localStorage.removeItem(`${POSITIONS_STORAGE_KEY}-${currentSiteId}-hierarchical`);
+			localStorage.removeItem(`${POSITIONS_STORAGE_KEY}-${currentSiteId}-radial`);
+		} catch (e) {
+			console.error('Failed to clear node positions:', e);
+		}
+	}
 
 	function generateNodeId(url: string): string {
 		const existingId = urlToNodeId.get(url);
@@ -49,7 +145,8 @@ function createSitemapStore() {
 					screenshotStatus: 'pending',
 					links: event.links,
 					internalLinks: event.internalLinks,
-					externalLinks: event.externalLinks
+					externalLinks: event.externalLinks,
+					isExpanded: true
 				}
 			};
 
@@ -125,145 +222,151 @@ function createSitemapStore() {
 
 	function layoutNodes() {
 		const currentNodes = get(nodes);
+		const currentEdges = get(edges);
+		const mode = get(layoutMode);
 
 		if (currentNodes.length === 0) return;
 
-		// Node dimensions for the larger sizes
-		const nodeWidth = 480;
-		const nodeHeight = 400;
-		const horizontalGap = 80;
-		const verticalGap = 100;
-
-		// Group nodes by depth
-		const nodesByDepth = new Map<number, PageNode[]>();
-		for (const node of currentNodes) {
-			const depth = node.data.depth;
-			if (!nodesByDepth.has(depth)) {
-				nodesByDepth.set(depth, []);
+		const layoutedNodes = applyLayout(currentNodes, currentEdges as Edge[], mode).map((node) => {
+			// Preserve manually positioned nodes
+			if (manuallyPositioned.has(node.id)) {
+				const original = currentNodes.find((n) => n.id === node.id);
+				if (original) return { ...node, position: original.position };
 			}
-			nodesByDepth.get(depth)!.push(node);
+			return node;
+		});
+
+		nodes.set(layoutedNodes);
+	}
+
+	function setLayoutMode(mode: LayoutMode) {
+		const currentMode = get(layoutMode);
+		console.log('[setLayoutMode] Switching from', currentMode, 'to', mode, '| siteId:', currentSiteId);
+
+		// Save positions for the current mode before switching
+		if (currentMode !== mode && currentSiteId) {
+			console.log('[setLayoutMode] Saving positions for', currentMode);
+			savePositions();
 		}
 
-		// Build parent-children map
-		const childrenByParent = new Map<string, PageNode[]>();
-		for (const node of currentNodes) {
-			if (node.data.parentUrl) {
-				const parentId = urlToNodeId.get(node.data.parentUrl);
-				if (parentId) {
-					if (!childrenByParent.has(parentId)) {
-						childrenByParent.set(parentId, []);
+		// Clear manually positioned and switch mode
+		manuallyPositioned.clear();
+		layoutMode.set(mode);
+
+		// Save layout mode to localStorage
+		if (browser) {
+			localStorage.setItem(LAYOUT_MODE_STORAGE_KEY, mode);
+		}
+
+		// Load saved positions for the new mode
+		console.log('[setLayoutMode] Loading positions for', mode);
+		const savedPositions = loadPositions(mode);
+		console.log('[setLayoutMode] Got savedPositions:', savedPositions ? Object.keys(savedPositions).length : 0);
+
+		if (savedPositions) {
+			nodes.update((currentNodes) =>
+				currentNodes.map((node) => {
+					if (savedPositions[node.id]) {
+						manuallyPositioned.add(node.id);
+						return { ...node, position: savedPositions[node.id] };
 					}
-					childrenByParent.get(parentId)!.push(node);
-				}
-			}
+					return node;
+				})
+			);
+			console.log('[setLayoutMode] Applied positions, manuallyPositioned:', manuallyPositioned.size);
 		}
 
-		// Calculate positions
-		const positions = new Map<string, { x: number; y: number }>();
+		// Apply layout (will preserve manually positioned nodes)
+		layoutNodes();
 
-		// Row 0: Homepage centered at top
-		const depth0Nodes = nodesByDepth.get(0) || [];
-		if (depth0Nodes.length > 0) {
-			const homepage = depth0Nodes[0];
-			positions.set(homepage.id, { x: 0, y: 0 });
+		// Save positions for the new mode
+		savePositions();
+	}
+
+	function onNodeDragStop(nodeId: string, position: { x: number; y: number }) {
+		console.log('[onNodeDragStop] Node', nodeId, 'dragged to', position);
+		manuallyPositioned.add(nodeId);
+		nodes.update((currentNodes) =>
+			currentNodes.map((n) => (n.id === nodeId ? { ...n, position } : n))
+		);
+		// Save positions after drag
+		savePositions();
+	}
+
+	// Reset to default state: clear positions, expand all, re-layout
+	function resetLayout() {
+		manuallyPositioned.clear();
+		clearAllSavedPositions(); // Clear positions for both hierarchical and radial modes
+
+		// Expand all nodes
+		nodes.update((currentNodes) =>
+			currentNodes.map((n) => ({
+				...n,
+				hidden: false,
+				data: { ...n.data, isExpanded: true }
+			}))
+		);
+
+		layoutNodes();
+	}
+
+	// Get all descendant IDs for a node
+	function getDescendantIds(nodeId: string, edgeList: Edge[]): string[] {
+		const children: string[] = [];
+		const directChildren = edgeList.filter((e) => e.source === nodeId).map((e) => e.target);
+
+		for (const childId of directChildren) {
+			children.push(childId);
+			children.push(...getDescendantIds(childId, edgeList));
 		}
+		return children;
+	}
 
-		// Row 1: Depth-1 nodes - main menu (left 60%) + user menu (right 40%)
-		const depth1Nodes = nodesByDepth.get(1) || [];
-		if (depth1Nodes.length > 0) {
-			// Split: first 60% are "main menu", rest are "user menu"
-			const mainCount = Math.ceil(depth1Nodes.length * 0.6);
-			const mainNodes = depth1Nodes.slice(0, mainCount);
-			const userNodes = depth1Nodes.slice(mainCount);
+	function toggleNodeExpanded(nodeId: string) {
+		const currentEdges = get(edges);
 
-			const row1Y = nodeHeight + verticalGap;
-
-			// Calculate total widths for centering
-			const mainWidth = mainNodes.length * nodeWidth + (mainNodes.length - 1) * horizontalGap;
-			const userWidth = userNodes.length * nodeWidth + (userNodes.length - 1) * horizontalGap;
-			const totalWidth = mainWidth + userWidth + horizontalGap * 2;
-
-			// Position main menu nodes (left side)
-			const mainStartX = -totalWidth / 2;
-			mainNodes.forEach((node, i) => {
-				positions.set(node.id, {
-					x: mainStartX + i * (nodeWidth + horizontalGap),
-					y: row1Y
-				});
-			});
-
-			// Position user menu nodes (right side)
-			const userStartX = mainStartX + mainWidth + horizontalGap * 2;
-			userNodes.forEach((node, i) => {
-				positions.set(node.id, {
-					x: userStartX + i * (nodeWidth + horizontalGap),
-					y: row1Y
-				});
-			});
-		}
-
-		// Row 2+: Position children under their parents
-		const processedDepths = new Set([0, 1]);
-		const maxDepth = Math.max(...nodesByDepth.keys());
-
-		for (let depth = 2; depth <= maxDepth; depth++) {
-			const depthNodes = nodesByDepth.get(depth) || [];
-			const rowY = depth * (nodeHeight + verticalGap);
-
-			// Group nodes by their parent
-			const nodesByParentId = new Map<string, PageNode[]>();
-			for (const node of depthNodes) {
-				const parentId = node.data.parentUrl ? urlToNodeId.get(node.data.parentUrl) : null;
-				const key = parentId || 'orphan';
-				if (!nodesByParentId.has(key)) {
-					nodesByParentId.set(key, []);
-				}
-				nodesByParentId.get(key)!.push(node);
-			}
-
-			// Position each group under their parent
-			for (const [parentId, children] of nodesByParentId) {
-				const parentPos = positions.get(parentId);
-				if (parentPos) {
-					// Center children under parent
-					const groupWidth = children.length * nodeWidth + (children.length - 1) * horizontalGap;
-					const startX = parentPos.x + nodeWidth / 2 - groupWidth / 2;
-
-					children.forEach((node, i) => {
-						positions.set(node.id, {
-							x: startX + i * (nodeWidth + horizontalGap),
-							y: rowY
-						});
-					});
-				} else {
-					// Orphan nodes - position them at the end
-					const existingPositions = Array.from(positions.values());
-					const maxX = existingPositions.length > 0
-						? Math.max(...existingPositions.map(p => p.x))
-						: 0;
-					children.forEach((node, i) => {
-						positions.set(node.id, {
-							x: maxX + (i + 1) * (nodeWidth + horizontalGap),
-							y: rowY
-						});
-					});
-				}
-			}
-		}
-
-		// Update node positions
 		nodes.update((currentNodes) => {
-			return currentNodes.map((node) => {
-				const pos = positions.get(node.id);
-				if (pos) {
-					return {
-						...node,
-						position: pos
-					};
+			const node = currentNodes.find((n) => n.id === nodeId);
+			if (!node) return currentNodes;
+
+			const isExpanding = node.data.isExpanded === false;
+			const childIds = getDescendantIds(nodeId, currentEdges as Edge[]);
+
+			return currentNodes.map((n) => {
+				if (n.id === nodeId) {
+					return { ...n, data: { ...n.data, isExpanded: isExpanding } };
 				}
-				return node;
+				if (childIds.includes(n.id)) {
+					return { ...n, hidden: !isExpanding };
+				}
+				return n;
 			});
 		});
+
+		layoutNodes();
+		savePositions();
+	}
+
+	function expandAll() {
+		nodes.update((currentNodes) =>
+			currentNodes.map((n) => ({
+				...n,
+				hidden: false,
+				data: { ...n.data, isExpanded: true }
+			}))
+		);
+		layoutNodes();
+	}
+
+	function collapseToDepth(maxDepth: number) {
+		nodes.update((currentNodes) =>
+			currentNodes.map((n) => ({
+				...n,
+				hidden: n.data.depth > maxDepth,
+				data: { ...n.data, isExpanded: n.data.depth < maxDepth }
+			}))
+		);
+		layoutNodes();
 	}
 
 	function setSessionId(sessionId: string) {
@@ -281,20 +384,60 @@ function createSitemapStore() {
 		selectedNodeId.set(null);
 		searchQuery.set('');
 		urlToNodeId.clear();
+		manuallyPositioned.clear();
+		layoutMode.set('hierarchical');
 	}
 
 	function loadFromCache(cachedNodes: PageNode[], cachedEdges: LinkEdge[]) {
 		// Clear existing data
 		urlToNodeId.clear();
+		manuallyPositioned.clear();
 
 		// Rebuild URL to node ID mapping
 		for (const node of cachedNodes) {
 			urlToNodeId.set(node.data.url, node.id);
 		}
 
+		// Initialize isExpanded for nodes without it
+		const nodesWithExpanded = cachedNodes.map((node) => ({
+			...node,
+			hidden: false,
+			data: {
+				...node.data,
+				isExpanded: node.data.isExpanded ?? true
+			}
+		}));
+
+		// Reorganize by URL path hierarchy
+		const { nodes: reorganizedNodes, edges: reorganizedEdges } = reorganizeByUrlHierarchy(
+			nodesWithExpanded,
+			cachedEdges as Edge[]
+		);
+
+		// Apply saved positions for current layout mode
+		const currentMode = get(layoutMode);
+		console.log('[loadFromCache] Current layout mode:', currentMode, 'siteId:', currentSiteId);
+		const savedPositions = loadPositions(currentMode);
+		console.log('[loadFromCache] savedPositions:', savedPositions ? Object.keys(savedPositions).length : 'null');
+
+		// Only use mode-specific saved positions, not cached positions from potentially different mode
+		const nodesWithPositions = reorganizedNodes.map((node) => {
+			if (savedPositions && savedPositions[node.id]) {
+				manuallyPositioned.add(node.id);
+				return { ...node, position: savedPositions[node.id] };
+			}
+			// No mode-specific position - let layoutNodes() calculate it
+			return node;
+		});
+
+		console.log('[loadFromCache] Loaded', manuallyPositioned.size, 'positions for', currentMode, 'mode');
+
 		// Load nodes and edges
-		nodes.set(cachedNodes);
-		edges.set(cachedEdges);
+		nodes.set(nodesWithPositions);
+		edges.set(reorganizedEdges as LinkEdge[]);
+
+		// Always apply layout - it will preserve positions for nodes in manuallyPositioned
+		layoutNodes();
 
 		// Reset progress
 		progress.set(defaultProgress);
@@ -302,9 +445,34 @@ function createSitemapStore() {
 		searchQuery.set('');
 	}
 
+	// Reorganize the current nodes/edges by URL hierarchy
+	function applyUrlHierarchy() {
+		const currentNodes = get(nodes);
+		const currentEdges = get(edges);
+
+		if (currentNodes.length === 0) return;
+
+		// Rebuild URL to node ID mapping
+		urlToNodeId.clear();
+		for (const node of currentNodes) {
+			urlToNodeId.set(node.data.url, node.id);
+		}
+
+		const { nodes: reorganizedNodes, edges: reorganizedEdges } = reorganizeByUrlHierarchy(
+			currentNodes,
+			currentEdges as Edge[]
+		);
+
+		nodes.set(reorganizedNodes);
+		edges.set(reorganizedEdges as LinkEdge[]);
+
+		// Re-apply layout after reorganizing
+		layoutNodes();
+	}
+
 	// Force a refresh of all nodes (creates new object references to trigger re-render)
 	function refreshNodes() {
-		nodes.update(current => current.map(n => ({ ...n, data: { ...n.data } })));
+		nodes.update((current) => current.map((n) => ({ ...n, data: { ...n.data } })));
 	}
 
 	function getCurrentData() {
@@ -338,11 +506,19 @@ function createSitemapStore() {
 		selectedNodeId,
 		searchQuery,
 		zoomLevel,
+		layoutMode,
 		filteredNodes,
 		selectedNode,
 		addPage,
 		updateScreenshot,
 		layoutNodes,
+		setLayoutMode,
+		onNodeDragStop,
+		resetLayout,
+		toggleNodeExpanded,
+		expandAll,
+		collapseToDepth,
+		applyUrlHierarchy,
 		setSessionId,
 		setStatus,
 		reset,
@@ -350,6 +526,8 @@ function createSitemapStore() {
 		loadFromCache,
 		getCurrentData,
 		refreshNodes,
+		setSiteId,
+		savePositions,
 		selectNode: (id: string | null) => selectedNodeId.set(id),
 		setSearchQuery: (query: string) => searchQuery.set(query),
 		setZoomLevel: (level: number) => zoomLevel.set(level)

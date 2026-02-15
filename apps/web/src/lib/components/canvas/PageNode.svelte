@@ -17,6 +17,10 @@
 	const currentProjectId = projectsStore.currentProjectId;
 	const projects = projectsStore.projects;
 	const searchQuery = sitemapStore.searchQuery;
+	const edges = sitemapStore.edges;
+
+	// Check if this node has children
+	let hasChildren = $derived($edges.some((e) => e.source === id));
 
 	// Check if node matches search query
 	let matchesSearch = $derived.by(() => {
@@ -118,6 +122,21 @@
 		<div
 			class="relative w-96 h-64 rounded-lg overflow-hidden shadow-lg bg-white border-2 {depthColor}"
 		>
+			<!-- Collapse/Expand button for nodes with children -->
+			{#if hasChildren}
+				<button
+					class="nodrag absolute top-2 right-8 w-6 h-6 flex items-center justify-center
+					       rounded-full bg-white/90 hover:bg-white text-gray-700 text-sm font-bold
+					       transition-colors z-20 border border-gray-300 shadow-sm"
+					onclick={(e) => {
+						e.stopPropagation();
+						sitemapStore.toggleNodeExpanded(id);
+					}}
+					title={data.isExpanded !== false ? 'Collapse children' : 'Expand children'}
+				>
+					{data.isExpanded !== false ? '−' : '+'}
+				</button>
+			{/if}
 			<!-- Overlay for nodes with feedback (green if all resolved, orange otherwise) -->
 			{#if feedbackStats.total > 0}
 				<div class="absolute inset-0 pointer-events-none z-10 {feedbackStats.allResolved ? 'bg-green-500/5' : 'bg-orange-500/5'}"></div>
@@ -175,6 +194,21 @@
 		<div
 			class="relative w-[480px] h-[400px] rounded-lg overflow-hidden shadow-xl bg-white border-2 {depthColor}"
 		>
+			<!-- Collapse/Expand button for nodes with children -->
+			{#if hasChildren}
+				<button
+					class="nodrag absolute top-2 right-10 w-7 h-7 flex items-center justify-center
+					       rounded-full bg-white/90 hover:bg-white text-gray-700 text-lg font-bold
+					       transition-colors z-20 border border-gray-300 shadow-sm"
+					onclick={(e) => {
+						e.stopPropagation();
+						sitemapStore.toggleNodeExpanded(id);
+					}}
+					title={data.isExpanded !== false ? 'Collapse children' : 'Expand children'}
+				>
+					{data.isExpanded !== false ? '−' : '+'}
+				</button>
+			{/if}
 			<!-- Overlay for nodes with feedback (green if all resolved, orange otherwise) -->
 			{#if feedbackStats.total > 0}
 				<div class="absolute inset-0 pointer-events-none z-10 {feedbackStats.allResolved ? 'bg-green-500/5' : 'bg-orange-500/5'}"></div>
