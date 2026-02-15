@@ -68,6 +68,13 @@
 			sitemapStore.reset();
 			sitemapStore.setSiteId(siteId);
 
+			// Apply initial layout mode from URL BEFORE loading cache
+			// so positions and layout are computed for the correct mode
+			if (initialView === 'radial') {
+				sitemapStore.layoutMode = 'radial';
+			}
+			initialView = null;
+
 			// Load crawl data (Supabase-first, localStorage fallback)
 			const cached = await crawlCacheService.load(siteId);
 
@@ -212,17 +219,6 @@
 					node.data.thumbnailUrl || null,
 					nodeId
 				);
-			}
-		}
-	});
-
-	// Apply initial view mode from URL
-	$effect(() => {
-		if (initialView && sitemapStore.nodes.length > 0) {
-			const view = initialView;
-			initialView = null;
-			if (view === 'radial' && sitemapStore.layoutMode !== 'radial') {
-				sitemapStore.setLayoutMode('radial');
 			}
 		}
 	});

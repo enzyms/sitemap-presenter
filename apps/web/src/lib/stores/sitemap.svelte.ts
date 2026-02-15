@@ -260,7 +260,11 @@ class SitemapStore {
 			localStorage.setItem(LAYOUT_MODE_STORAGE_KEY, mode);
 		}
 
-		// Synchronous localStorage load for instant render
+		// First, re-layout all nodes with the new mode's algorithm
+		// (manuallyPositioned is empty, so all nodes get fresh positions)
+		this.layoutNodes();
+
+		// Then overlay any saved positions for nodes the user had manually arranged
 		const savedPositions = this.loadPositionsSync(mode);
 
 		if (savedPositions) {
@@ -273,7 +277,6 @@ class SitemapStore {
 			});
 		}
 
-		this.layoutNodes();
 		this.savePositions();
 
 		// Load meta for new mode
