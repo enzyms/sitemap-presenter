@@ -217,7 +217,10 @@ async function startCrawl(sessionId: string): Promise<void> {
 	// Phase 2: Generate screenshots
 	sessionManager.setStatus(sessionId, 'screenshotting');
 
-	await screenshotService.initialize();
+	await screenshotService.initialize({
+		httpUser: session.config.httpUser,
+		httpPassword: session.config.httpPassword
+	});
 
 	for (const [url] of pages) {
 		if (sessionManager.isCancelled(sessionId)) {

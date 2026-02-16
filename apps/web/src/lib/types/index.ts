@@ -37,6 +37,8 @@ export interface CrawlConfig {
 	url: string;
 	maxDepth: number;
 	maxPages: number;
+	httpUser?: string;
+	httpPassword?: string;
 }
 
 export interface CrawlProgress {

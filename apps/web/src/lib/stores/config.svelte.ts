@@ -10,6 +10,8 @@ class ConfigStore {
 	url = $state(defaultConfig.url);
 	maxDepth = $state(defaultConfig.maxDepth);
 	maxPages = $state(defaultConfig.maxPages);
+	httpUser = $state('');
+	httpPassword = $state('');
 
 	setUrl(url: string) {
 		this.url = url;
@@ -27,15 +29,22 @@ class ConfigStore {
 		this.url = defaultConfig.url;
 		this.maxDepth = defaultConfig.maxDepth;
 		this.maxPages = defaultConfig.maxPages;
+		this.httpUser = '';
+		this.httpPassword = '';
 	}
 
 	/** Get current config as a plain object (for API calls). */
 	get current(): CrawlConfig {
-		return {
+		const config: CrawlConfig = {
 			url: this.url,
 			maxDepth: this.maxDepth,
 			maxPages: this.maxPages
 		};
+		if (this.httpUser) {
+			config.httpUser = this.httpUser;
+			config.httpPassword = this.httpPassword;
+		}
+		return config;
 	}
 }
 

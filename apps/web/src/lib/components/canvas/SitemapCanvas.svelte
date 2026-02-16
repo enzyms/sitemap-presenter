@@ -61,6 +61,7 @@
 
 	// Crawl settings popover
 	let showCrawlSettings = $state(false);
+	let showAuthFields = $state(false);
 	let isLoading = $state(false);
 	let crawlError = $state('');
 
@@ -284,6 +285,42 @@
 										max="500"
 										class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
 									/>
+								</div>
+
+								<!-- HTTP Auth (collapsible) -->
+								<div>
+									<button
+										type="button"
+										onclick={() => (showAuthFields = !showAuthFields)}
+										class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+									>
+										<svg
+											class="w-3 h-3 transition-transform {showAuthFields ? 'rotate-90' : ''}"
+											fill="none" stroke="currentColor" viewBox="0 0 24 24"
+										>
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+										</svg>
+										HTTP Auth / SSL
+									</button>
+									{#if showAuthFields}
+										<div class="mt-2 space-y-2">
+											<input
+												type="text"
+												value={configStore.httpUser}
+												oninput={(e) => (configStore.httpUser = (e.target as HTMLInputElement).value)}
+												placeholder="Username"
+												class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500"
+											/>
+											<input
+												type="password"
+												value={configStore.httpPassword}
+												oninput={(e) => (configStore.httpPassword = (e.target as HTMLInputElement).value)}
+												placeholder="Password"
+												class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500"
+											/>
+											<p class="text-xs text-gray-400">For .htaccess or DDEV sites (also ignores SSL errors)</p>
+										</div>
+									{/if}
 								</div>
 
 								{#if crawlError}

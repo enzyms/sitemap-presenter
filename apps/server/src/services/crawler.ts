@@ -1,4 +1,4 @@
-import { chromium, Browser, Page } from 'playwright';
+import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import type { PageInfo, CrawlConfig } from '../types/index.js';
 
 interface CrawlCallbacks {
@@ -11,6 +11,7 @@ export class CrawlerService {
 	private visited = new Set<string>();
 	private baseUrl: URL | null = null;
 	private browser: Browser | null = null;
+	private browserContext: BrowserContext | null = null;
 
 	async crawl(
 		config: CrawlConfig,
@@ -28,8 +29,23 @@ export class CrawlerService {
 		// Initialize browser for SPA support
 		this.browser = await chromium.launch({
 			headless: true,
-			args: ['--no-sandbox', '--disable-setuid-sandbox']
+			args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
 		});
+
+		// Create a context with HTTP Basic Auth and SSL tolerance
+		const contextOptions: {
+			ignoreHTTPSErrors: boolean;
+			httpCredentials?: { username: string; password: string };
+		} = { ignoreHTTPSErrors: true };
+
+		if (config.httpUser) {
+			contextOptions.httpCredentials = {
+				username: config.httpUser,
+				password: config.httpPassword || ''
+			};
+		}
+
+		this.browserContext = await this.browser.newContext(contextOptions);
 
 		const queue: Array<{ url: string; depth: number; parentUrl: string | null }> = [
 			{ url: this.normalizeUrl(config.url), depth: 0, parentUrl: null }
@@ -82,14 +98,14 @@ export class CrawlerService {
 	}
 
 	private async fetchAndParse(url: string, depth: number, parentUrl: string | null): Promise<PageInfo | null> {
-		if (!this.browser) {
-			throw new Error('Browser not initialized');
+		if (!this.browserContext) {
+			throw new Error('Browser context not initialized');
 		}
 
 		let page: Page | null = null;
 
 		try {
-			page = await this.browser.newPage();
+			page = await this.browserContext.newPage();
 
 			// Set a reasonable viewport
 			await page.setViewportSize({ width: 1280, height: 800 });
@@ -214,6 +230,10 @@ export class CrawlerService {
 	}
 
 	private async closeBrowser(): Promise<void> {
+		if (this.browserContext) {
+			await this.browserContext.close().catch(() => {});
+			this.browserContext = null;
+		}
 		if (this.browser) {
 			await this.browser.close().catch(() => {});
 			this.browser = null;

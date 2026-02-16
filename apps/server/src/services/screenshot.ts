@@ -1,4 +1,4 @@
-import { chromium, Browser, Page } from 'playwright';
+import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import sharp from 'sharp';
 import { createHash } from 'crypto';
 import { getSupabaseAdmin, SCREENSHOTS_BUCKET } from './supabaseClient.js';
@@ -10,23 +10,52 @@ interface ScreenshotResult {
 	error?: string;
 }
 
+interface ScreenshotAuth {
+	httpUser?: string;
+	httpPassword?: string;
+}
+
 export class ScreenshotService {
 	private browser: Browser | null = null;
+	private context: BrowserContext | null = null;
 	private isInitialized = false;
 
-	async initialize(): Promise<void> {
-		if (this.isInitialized) return;
+	async initialize(auth?: ScreenshotAuth): Promise<void> {
+		if (this.isInitialized) {
+			// Re-initialize context if auth changed
+			if (auth?.httpUser && this.context) {
+				await this.context.close().catch(() => {});
+				this.context = await this.browser!.newContext({
+					ignoreHTTPSErrors: true,
+					httpCredentials: { username: auth.httpUser, password: auth.httpPassword || '' }
+				});
+			}
+			return;
+		}
 
 		this.browser = await chromium.launch({
 			headless: true,
-			args: ['--no-sandbox', '--disable-setuid-sandbox']
+			args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
 		});
 
+		const contextOptions: {
+			ignoreHTTPSErrors: boolean;
+			httpCredentials?: { username: string; password: string };
+		} = { ignoreHTTPSErrors: true };
+
+		if (auth?.httpUser) {
+			contextOptions.httpCredentials = {
+				username: auth.httpUser,
+				password: auth.httpPassword || ''
+			};
+		}
+
+		this.context = await this.browser.newContext(contextOptions);
 		this.isInitialized = true;
 	}
 
 	async takeScreenshot(url: string): Promise<ScreenshotResult> {
-		if (!this.browser) {
+		if (!this.context) {
 			await this.initialize();
 		}
 
@@ -49,7 +78,7 @@ export class ScreenshotService {
 		let page: Page | null = null;
 
 		try {
-			page = await this.browser!.newPage();
+			page = await this.context!.newPage();
 
 			// Set viewport to standard desktop size
 			await page.setViewportSize({ width: 1280, height: 800 });
@@ -144,6 +173,10 @@ export class ScreenshotService {
 	}
 
 	async close(): Promise<void> {
+		if (this.context) {
+			await this.context.close().catch(() => {});
+			this.context = null;
+		}
 		if (this.browser) {
 			await this.browser.close();
 			this.browser = null;
