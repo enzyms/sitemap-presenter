@@ -1,6 +1,14 @@
 // Widget CSS styles (will be injected into Shadow DOM)
 export const widgetStyles = `
   :host {
+    position: fixed;
+    z-index: 999999;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    overflow: visible;
+    pointer-events: none;
     --primary-color: #f97316;
     --primary-hover: #ea580c;
     --primary-light: #fff7ed;
@@ -27,12 +35,6 @@ export const widgetStyles = `
     color: var(--gray-800);
   }
 
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-
   /* Floating button */
   .feedback-button {
     position: fixed;
@@ -50,6 +52,7 @@ export const widgetStyles = `
     cursor: pointer;
     box-shadow: var(--shadow-lg);
     transition: all 0.2s ease;
+    pointer-events: auto;
   }
 
   .feedback-button:hover {
@@ -80,9 +83,17 @@ export const widgetStyles = `
   .position-top-right { top: 24px; right: 24px; }
   .position-top-left { top: 24px; left: 24px; }
 
-  /* Marker bubble - custom element */
-  feedback-marker-bubble {
-    position: absolute;
+  /* Markers layer — fixed fullscreen, pointer-events pass through */
+  .markers-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 999997;
+  }
+
+  /* Marker bubble wrapper (replaces feedback-marker-bubble custom element) */
+  .marker-bubble-wrapper {
+    position: fixed;
     display: block;
     pointer-events: auto;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -91,7 +102,6 @@ export const widgetStyles = `
   /* Marker bubbles on the page */
   .marker-bubble {
     position: relative;
-    z-index: 999997;
     width: 28px;
     height: 28px;
     border-radius: 50%;
@@ -146,11 +156,12 @@ export const widgetStyles = `
     height: 16px;
   }
 
-  /* Comments panel - custom element */
-  feedback-comments-panel {
+  /* Comments panel wrapper (replaces feedback-comments-panel custom element) */
+  .comments-panel-wrapper {
     position: fixed;
     z-index: 999999;
     display: block;
+    pointer-events: auto;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: 14px;
     line-height: 1.5;
@@ -349,7 +360,7 @@ export const widgetStyles = `
 
   /* Element highlight during placement */
   .element-highlight {
-    position: absolute;
+    position: fixed;
     z-index: 999996;
     pointer-events: none;
     border: 2px solid var(--primary-color);
@@ -387,6 +398,7 @@ export const widgetStyles = `
     font-weight: 500;
     cursor: pointer;
     box-shadow: var(--shadow-lg);
+    pointer-events: auto;
   }
 
   .cancel-placement:hover {

@@ -11,9 +11,8 @@
  * ></script>
  */
 
-// Import components to register them as custom elements
-import './components/MarkerBubble';
-import './components/CommentsPanel';
+// Import FeedbackWidget to register it as a custom element
+// (MarkerBubble and CommentsPanel are now plain classes, not custom elements)
 import './components/FeedbackWidget';
 
 // Auto-initialize: find the script tag and create widget

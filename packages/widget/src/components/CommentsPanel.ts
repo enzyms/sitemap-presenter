@@ -7,12 +7,14 @@ export interface CommentsPanelEvents {
   onDelete: (markerId: string) => void;
 }
 
-export class CommentsPanel extends HTMLElement {
+export class CommentsPanel {
+  public element: HTMLDivElement;
   private marker: MarkerWithComments | null = null;
   private events: CommentsPanelEvents | null = null;
 
   constructor() {
-    super();
+    this.element = document.createElement('div');
+    this.element.className = 'comments-panel-wrapper';
   }
 
   setMarker(marker: MarkerWithComments) {
@@ -70,8 +72,8 @@ export class CommentsPanel extends HTMLElement {
       top = padding;
     }
 
-    this.style.left = `${left}px`;
-    this.style.top = `${top}px`;
+    this.element.style.left = `${left}px`;
+    this.element.style.top = `${top}px`;
   }
 
   private render() {
@@ -79,7 +81,7 @@ export class CommentsPanel extends HTMLElement {
 
     const isResolved = this.marker.status === 'resolved';
 
-    this.innerHTML = `
+    this.element.innerHTML = `
       <div class="comments-panel">
         <div class="comments-panel-header">
           <h3>
@@ -152,7 +154,7 @@ export class CommentsPanel extends HTMLElement {
   }
 
   private renderComments() {
-    const container = this.querySelector('[data-comments-container]');
+    const container = this.element.querySelector('[data-comments-container]');
     if (container) {
       container.innerHTML = this.renderCommentsHTML();
     }
@@ -160,25 +162,25 @@ export class CommentsPanel extends HTMLElement {
 
   private attachEventListeners() {
     // Close button
-    this.querySelector('[data-action="close"]')?.addEventListener('click', () => {
+    this.element.querySelector('[data-action="close"]')?.addEventListener('click', () => {
       this.events?.onClose();
     });
 
     // Resolve/Reopen button
-    this.querySelector('[data-action="resolve"]')?.addEventListener('click', () => {
+    this.element.querySelector('[data-action="resolve"]')?.addEventListener('click', () => {
       if (this.marker && this.events) {
         this.events.onStatusChange(this.marker.id, 'resolved');
       }
     });
 
-    this.querySelector('[data-action="reopen"]')?.addEventListener('click', () => {
+    this.element.querySelector('[data-action="reopen"]')?.addEventListener('click', () => {
       if (this.marker && this.events) {
         this.events.onStatusChange(this.marker.id, 'open');
       }
     });
 
     // Delete button
-    this.querySelector('[data-action="delete"]')?.addEventListener('click', () => {
+    this.element.querySelector('[data-action="delete"]')?.addEventListener('click', () => {
       if (this.marker && this.events) {
         if (confirm('Delete this feedback marker?')) {
           this.events.onDelete(this.marker.id);
@@ -187,8 +189,8 @@ export class CommentsPanel extends HTMLElement {
     });
 
     // Comment input
-    const input = this.querySelector('[data-comment-input]') as HTMLInputElement;
-    const submitBtn = this.querySelector('[data-action="submit"]') as HTMLButtonElement;
+    const input = this.element.querySelector('[data-comment-input]') as HTMLInputElement;
+    const submitBtn = this.element.querySelector('[data-action="submit"]') as HTMLButtonElement;
 
     if (input && submitBtn) {
       input.addEventListener('input', () => {
@@ -238,6 +240,8 @@ export class CommentsPanel extends HTMLElement {
   getMarkerId(): string | null {
     return this.marker?.id || null;
   }
-}
 
-customElements.define('feedback-comments-panel', CommentsPanel);
+  destroy() {
+    this.element.remove();
+  }
+}

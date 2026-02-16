@@ -53,6 +53,9 @@ export class FeedbackWidget extends HTMLElement {
   private highlightOverlay: HTMLDivElement | null = null;
   private cancelButton: HTMLButtonElement | null = null;
 
+  // Track marker bubble instances for scroll updates
+  private markerBubbles: MarkerBubble[] = [];
+
   constructor() {
     super();
     this.shadow = this.attachShadow({ mode: 'open' });
@@ -94,7 +97,7 @@ export class FeedbackWidget extends HTMLElement {
   private async initialize() {
     if (!this.config) return;
 
-    // Inject styles
+    // Inject styles into shadow DOM
     const style = document.createElement('style');
     style.textContent = widgetStyles;
     this.shadow.appendChild(style);
@@ -184,20 +187,14 @@ export class FeedbackWidget extends HTMLElement {
   }
 
   private createMarkersContainer() {
-    // Markers are positioned in the document body, not shadow DOM
+    // Markers container lives inside the shadow DOM
     this.markersContainer = document.createElement('div');
-    this.markersContainer.id = 'feedback-markers-container';
-    this.markersContainer.style.cssText = 'position: absolute; top: 0; left: 0; pointer-events: none; z-index: 999997;';
-    document.body.appendChild(this.markersContainer);
+    this.markersContainer.className = 'markers-layer';
+    this.shadow.appendChild(this.markersContainer);
   }
 
   private createPlacementElements() {
     if (!this.container) return;
-
-    // IMPORTANT: Inject styles to document head immediately
-    // This ensures styles work for elements outside shadow DOM
-    // (highlightOverlay, markersContainer, marker bubbles, comments panel)
-    this.injectPanelStyles();
 
     // Placement cursor (follows mouse)
     this.placementCursor = document.createElement('div');
@@ -210,11 +207,11 @@ export class FeedbackWidget extends HTMLElement {
     `;
     this.container.appendChild(this.placementCursor);
 
-    // Element highlight overlay
+    // Element highlight overlay — inside shadow DOM with fixed positioning
     this.highlightOverlay = document.createElement('div');
     this.highlightOverlay.className = 'element-highlight';
     this.highlightOverlay.style.display = 'none';
-    document.body.appendChild(this.highlightOverlay);
+    this.shadow.appendChild(this.highlightOverlay);
 
     // Cancel button
     this.cancelButton = document.createElement('button');
@@ -248,17 +245,18 @@ export class FeedbackWidget extends HTMLElement {
 
     // Clear existing markers
     this.markersContainer.innerHTML = '';
+    this.markerBubbles = [];
 
     // Create marker bubbles
     for (const marker of this.markers) {
-      const bubble = document.createElement('feedback-marker-bubble') as MarkerBubble;
-      bubble.style.pointerEvents = 'auto';
+      const bubble = new MarkerBubble();
       bubble.setMarker(marker);
 
       // Add click handler
-      bubble.addEventListener('click', () => this.openCommentsPanel(marker));
+      bubble.element.addEventListener('click', () => this.openCommentsPanel(marker));
 
-      this.markersContainer.appendChild(bubble);
+      this.markersContainer.appendChild(bubble.element);
+      this.markerBubbles.push(bubble);
     }
   }
 
@@ -399,7 +397,7 @@ export class FeedbackWidget extends HTMLElement {
       this.cancelButton.style.display = 'block';
     }
 
-    // Change cursor
+    // Change cursor on host page
     document.body.style.cursor = 'crosshair';
 
     // Add event listeners
@@ -449,11 +447,11 @@ export class FeedbackWidget extends HTMLElement {
     if (element && element !== this.hoveredElement) {
       this.hoveredElement = element;
 
-      // Update highlight overlay
+      // Update highlight overlay — use viewport coords (fixed positioning)
       const rect = element.getBoundingClientRect();
       this.highlightOverlay.style.display = 'block';
-      this.highlightOverlay.style.left = `${rect.left + window.scrollX}px`;
-      this.highlightOverlay.style.top = `${rect.top + window.scrollY}px`;
+      this.highlightOverlay.style.left = `${rect.left}px`;
+      this.highlightOverlay.style.top = `${rect.top}px`;
       this.highlightOverlay.style.width = `${rect.width}px`;
       this.highlightOverlay.style.height = `${rect.height}px`;
     }
@@ -503,12 +501,8 @@ export class FeedbackWidget extends HTMLElement {
   }
 
   private isWidgetElement(element: Element): boolean {
-    // Check if element is part of the widget
-    if (element.closest('feedback-widget')) return true;
-    if (element.closest('#feedback-markers-container')) return true;
-    if (element.closest('feedback-marker-bubble')) return true;
-    if (element.closest('feedback-comments-panel')) return true;
-    return false;
+    // Check if element is the host element or lives inside our shadow DOM
+    return element === this || this.shadow.contains(element);
   }
 
   // ============================================================
@@ -662,8 +656,8 @@ export class FeedbackWidget extends HTMLElement {
 
     this.activeMarkerId = marker.id;
 
-    // Create panel
-    this.commentsPanel = document.createElement('feedback-comments-panel') as CommentsPanel;
+    // Create panel as plain class instance
+    this.commentsPanel = new CommentsPanel();
     this.commentsPanel.setMarker(marker);
 
     const events: CommentsPanelEvents = {
@@ -722,85 +716,37 @@ export class FeedbackWidget extends HTMLElement {
 
     this.commentsPanel.setEvents(events);
 
-    // Add panel to body (outside shadow DOM for proper positioning)
-    document.body.appendChild(this.commentsPanel);
+    // Add panel to shadow DOM
+    this.shadow.appendChild(this.commentsPanel.element);
 
     // Position near the marker bubble
-    const bubble = this.markersContainer?.querySelector(`[data-marker-id="${marker.id}"]`);
-    if (bubble) {
-      const rect = bubble.getBoundingClientRect();
+    const bubbleEl = this.markersContainer?.querySelector(`[data-marker-id="${marker.id}"]`);
+    if (bubbleEl) {
+      const rect = bubbleEl.getBoundingClientRect();
       this.commentsPanel.positionNear(rect.left + rect.width / 2, rect.top);
 
       // Highlight the marker
-      const bubbleComponent = bubble.closest('feedback-marker-bubble') as MarkerBubble;
-      if (bubbleComponent) {
-        bubbleComponent.setHighlighted(true);
+      const bubble = this.markerBubbles.find(b => b.getMarkerId() === marker.id);
+      if (bubble) {
+        bubble.setHighlighted(true);
       }
     }
-
-    // Add styles for the panel (it's outside shadow DOM)
-    this.injectPanelStyles();
   }
 
   private closeCommentsPanel() {
     if (this.commentsPanel) {
       // Remove highlight from marker
-      if (this.activeMarkerId && this.markersContainer) {
-        const bubble = this.markersContainer.querySelector(`[data-marker-id="${this.activeMarkerId}"]`);
+      if (this.activeMarkerId) {
+        const bubble = this.markerBubbles.find(b => b.getMarkerId() === this.activeMarkerId);
         if (bubble) {
-          const bubbleComponent = bubble.closest('feedback-marker-bubble') as MarkerBubble;
-          if (bubbleComponent) {
-            bubbleComponent.setHighlighted(false);
-          }
+          bubble.setHighlighted(false);
         }
       }
 
-      this.commentsPanel.remove();
+      this.commentsPanel.destroy();
       this.commentsPanel = null;
       this.activeMarkerId = null;
     }
-  }
-
-  private injectPanelStyles() {
-    // Check if styles already injected
-    if (document.getElementById('feedback-widget-styles')) return;
-
-    // Define CSS variables at :root level so they work outside shadow DOM
-    // Use the same variable names as in the CSS so no replacement is needed
-    const rootVariables = `
-      :root {
-        --primary-color: ${this.config?.primaryColor || '#f97316'};
-        --primary-hover: #ea580c;
-        --primary-light: #fff7ed;
-        --success-color: #22c55e;
-        --success-light: #f0fdf4;
-        --gray-50: #f9fafb;
-        --gray-100: #f3f4f6;
-        --gray-200: #e5e7eb;
-        --gray-300: #d1d5db;
-        --gray-400: #9ca3af;
-        --gray-500: #6b7280;
-        --gray-600: #4b5563;
-        --gray-700: #374151;
-        --gray-800: #1f2937;
-        --gray-900: #111827;
-        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-        --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-        --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-      }
-    `;
-
-    // Remove the :host block since we define variables at :root
-    // The :host block only works in shadow DOM, not in document head
-    const documentStyles = widgetStyles
-      .replace(/:host\s*\{[^}]*\}/g, ''); // Remove the entire :host block
-
-    const style = document.createElement('style');
-    style.id = 'feedback-widget-styles';
-    style.textContent = rootVariables + documentStyles;
-    document.head.appendChild(style);
   }
 
   // ============================================================
@@ -809,9 +755,8 @@ export class FeedbackWidget extends HTMLElement {
 
   private handleScroll() {
     // Update marker positions
-    if (this.markersContainer) {
-      const bubbles = this.markersContainer.querySelectorAll('feedback-marker-bubble') as NodeListOf<MarkerBubble>;
-      bubbles.forEach(bubble => bubble.updatePosition());
+    for (const bubble of this.markerBubbles) {
+      bubble.updatePosition();
     }
   }
 
@@ -830,18 +775,13 @@ export class FeedbackWidget extends HTMLElement {
       this.unsubscribe = null;
     }
 
-    if (this.markersContainer) {
-      this.markersContainer.remove();
-      this.markersContainer = null;
-    }
-
-    if (this.highlightOverlay) {
-      this.highlightOverlay.remove();
-      this.highlightOverlay = null;
-    }
+    // Shadow children are auto-removed when the host element is removed,
+    // but we null references for GC
+    this.markersContainer = null;
+    this.highlightOverlay = null;
+    this.markerBubbles = [];
 
     if (this.commentsPanel) {
-      this.commentsPanel.remove();
       this.commentsPanel = null;
     }
 
@@ -1058,20 +998,15 @@ export class FeedbackWidget extends HTMLElement {
 
   private handleHighlightMarkerRequest(markerId: string | null) {
     // Remove highlight from all markers
-    if (this.markersContainer) {
-      const bubbles = this.markersContainer.querySelectorAll('feedback-marker-bubble') as NodeListOf<MarkerBubble>;
-      bubbles.forEach(bubble => bubble.setHighlighted(false));
+    for (const bubble of this.markerBubbles) {
+      bubble.setHighlighted(false);
     }
 
     // Highlight the specified marker
-    if (markerId && this.markersContainer) {
-      const marker = this.markers.find(m => m.id === markerId);
-      if (marker) {
-        // Open comments panel for the marker
-        const markerWithComments = this.markers.find(m => m.id === markerId);
-        if (markerWithComments) {
-          this.openCommentsPanel(markerWithComments);
-        }
+    if (markerId) {
+      const markerWithComments = this.markers.find(m => m.id === markerId);
+      if (markerWithComments) {
+        this.openCommentsPanel(markerWithComments);
       }
     } else {
       this.closeCommentsPanel();

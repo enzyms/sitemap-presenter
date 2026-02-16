@@ -1,15 +1,13 @@
 import type { MarkerWithComments } from '@sitemap-presenter/shared';
 
-export class MarkerBubble extends HTMLElement {
+export class MarkerBubble {
+  public element: HTMLDivElement;
   private marker: MarkerWithComments | null = null;
   private highlighted = false;
 
-  static get observedAttributes() {
-    return ['highlighted'];
-  }
-
   constructor() {
-    super();
+    this.element = document.createElement('div');
+    this.element.className = 'marker-bubble-wrapper';
   }
 
   setMarker(marker: MarkerWithComments) {
@@ -24,7 +22,7 @@ export class MarkerBubble extends HTMLElement {
   }
 
   private updateHighlightClass() {
-    const bubble = this.querySelector('.marker-bubble');
+    const bubble = this.element.querySelector('.marker-bubble');
     if (bubble) {
       bubble.classList.toggle('highlighted', this.highlighted);
     }
@@ -35,7 +33,7 @@ export class MarkerBubble extends HTMLElement {
 
     const isResolved = this.marker.status === 'resolved';
 
-    this.innerHTML = `
+    this.element.innerHTML = `
       <div class="marker-bubble ${isResolved ? 'resolved' : ''} ${this.highlighted ? 'highlighted' : ''}"
            data-marker-id="${this.marker.id}"
            title="Click to view comments">
@@ -48,19 +46,19 @@ export class MarkerBubble extends HTMLElement {
     if (!this.marker) return;
 
     // Try to find the element using the anchor
-    let element: Element | null = null;
+    let targetElement: Element | null = null;
 
     // Try CSS selector first
     if (this.marker.anchor.selector) {
       try {
-        element = document.querySelector(this.marker.anchor.selector);
+        targetElement = document.querySelector(this.marker.anchor.selector);
       } catch {
         // Invalid selector
       }
     }
 
     // Try XPath if selector failed
-    if (!element && this.marker.anchor.xpath) {
+    if (!targetElement && this.marker.anchor.xpath) {
       try {
         const result = document.evaluate(
           this.marker.anchor.xpath,
@@ -69,7 +67,7 @@ export class MarkerBubble extends HTMLElement {
           XPathResult.FIRST_ORDERED_NODE_TYPE,
           null
         );
-        element = result.singleNodeValue as Element | null;
+        targetElement = result.singleNodeValue as Element | null;
       } catch {
         // Invalid XPath
       }
@@ -77,26 +75,29 @@ export class MarkerBubble extends HTMLElement {
 
     let x: number, y: number;
 
-    if (element) {
-      // Position relative to element
-      const rect = element.getBoundingClientRect();
-      x = rect.left + this.marker.anchor.offsetX + window.scrollX;
-      y = rect.top + this.marker.anchor.offsetY + window.scrollY;
+    if (targetElement) {
+      // Position relative to element using fixed positioning (viewport coords)
+      const rect = targetElement.getBoundingClientRect();
+      x = rect.left + this.marker.anchor.offsetX;
+      y = rect.top + this.marker.anchor.offsetY;
     } else {
-      // Use fallback position (percentage of viewport)
-      x = (this.marker.fallback_position.xPercent / 100) * document.documentElement.scrollWidth;
-      y = (this.marker.fallback_position.yPercent / 100) * document.documentElement.scrollHeight;
+      // Use fallback position: convert document percentages to viewport coords
+      const docX = (this.marker.fallback_position.xPercent / 100) * document.documentElement.scrollWidth;
+      const docY = (this.marker.fallback_position.yPercent / 100) * document.documentElement.scrollHeight;
+      x = docX - window.scrollX;
+      y = docY - window.scrollY;
     }
 
-    this.style.position = 'absolute';
-    this.style.left = `${x}px`;
-    this.style.top = `${y}px`;
-    this.style.zIndex = '999997';
+    this.element.style.position = 'fixed';
+    this.element.style.left = `${x}px`;
+    this.element.style.top = `${y}px`;
   }
 
   getMarkerId(): string | null {
     return this.marker?.id || null;
   }
-}
 
-customElements.define('feedback-marker-bubble', MarkerBubble);
+  destroy() {
+    this.element.remove();
+  }
+}
