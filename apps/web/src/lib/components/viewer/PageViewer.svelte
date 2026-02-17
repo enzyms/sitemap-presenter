@@ -14,12 +14,25 @@
 
 	let iframeLoaded = $state(false);
 	let iframeError = $state(false);
-	let useScreenshot = $state(false);
 	let loadTimeout: ReturnType<typeof setTimeout>;
 	let iframeRef = $state<HTMLIFrameElement | null>(null);
 	let highlightedMarkerId = $state<string | null>(null);
 	let showFeedbackSidebar = $state(true);
 	let initialLoadComplete = $state(false);
+
+	// Viewport-aware resizable iframe state
+	let iframeWidth = $state<number | 'auto'>('auto');
+	let isResizing = $state(false);
+	let containerRef = $state<HTMLDivElement | null>(null);
+	let containerWidth = $state(0);
+	let effectiveWidth = $derived(
+		iframeWidth === 'auto' ? containerWidth : Math.min(iframeWidth, containerWidth)
+	);
+	let activeMarkerViewportWidth = $derived.by(() => {
+		if (!highlightedMarkerId) return null;
+		const marker = feedbackMarkers.find((m) => m.id === highlightedMarkerId);
+		return marker?.viewport?.width ?? null;
+	});
 
 	// Iframe src is set once when the viewer opens; never updated on in-iframe navigation
 	// so that changing the display URL doesn't cause the iframe to reload.
@@ -46,6 +59,41 @@
 		}
 	});
 
+	// Track container width for clamping
+	$effect(() => {
+		if (!containerRef) return;
+		const observer = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				containerWidth = entry.contentRect.width;
+			}
+		});
+		observer.observe(containerRef);
+		return () => observer.disconnect();
+	});
+
+	function startResize(event: MouseEvent, side: 'left' | 'right') {
+		event.preventDefault();
+		const startX = event.clientX;
+		const startWidth = iframeWidth === 'auto' ? containerWidth : effectiveWidth;
+		isResizing = true;
+
+		function onMouseMove(e: MouseEvent) {
+			const delta = side === 'right' ? e.clientX - startX : startX - e.clientX;
+			// Multiply by 2 because the iframe is centered — handle follows cursor
+			const newWidth = Math.max(320, Math.min(startWidth + delta * 2, containerWidth));
+			iframeWidth = newWidth;
+		}
+
+		function onMouseUp() {
+			isResizing = false;
+			window.removeEventListener('mousemove', onMouseMove);
+			window.removeEventListener('mouseup', onMouseUp);
+		}
+
+		window.addEventListener('mousemove', onMouseMove);
+		window.addEventListener('mouseup', onMouseUp);
+	}
+
 	// Reactively filter feedbacks to the current page.
 	// feedbackStore is already initialized by the map page — we just set the filter.
 	$effect(() => {
@@ -64,10 +112,11 @@
 		feedbackStore.setCurrentPage(null);
 		iframeLoaded = false;
 		iframeError = false;
-		useScreenshot = false;
 		highlightedMarkerId = null;
 		initialLoadComplete = false;
 		iframeSrc = null;
+		iframeWidth = 'auto';
+		isResizing = false;
 		if (loadTimeout) clearTimeout(loadTimeout);
 	}
 
@@ -86,10 +135,10 @@
 		// Reset iframe state for new page
 		iframeLoaded = false;
 		iframeError = false;
-		useScreenshot = false;
 		initialLoadComplete = false;
 		iframeSrc = null;
 		highlightedMarkerId = null;
+		iframeWidth = 'auto';
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
@@ -142,11 +191,6 @@
 		if (loadTimeout) clearTimeout(loadTimeout);
 	}
 
-	function switchToScreenshot() {
-		useScreenshot = true;
-		if (loadTimeout) clearTimeout(loadTimeout);
-	}
-
 	// Handle messages from iframe (widget postMessage)
 	function handleIframeMessage(data: IframeToSitemapMessage) {
 		switch (data.type) {
@@ -163,6 +207,9 @@
 		// Update the display URL + title (does NOT touch iframeSrc, so no iframe reload).
 		// This also triggers the $effect above which filters feedbacks to this page.
 		pageViewerStore.updateCurrentPage(newUrl, newTitle);
+
+		// Reset viewport to full width on page change
+		iframeWidth = 'auto';
 
 		// Find & select the matching node
 		const matchingNode = findNodeByUrl(newUrl);
@@ -192,6 +239,8 @@
 	function handleMarkerClick(marker: FeedbackMarker) {
 		highlightedMarkerId = marker.id;
 		messenger.highlightMarker(marker.id);
+		// Resize iframe to marker's viewport width
+		iframeWidth = marker.viewport.width;
 	}
 
 	async function handleMarkerStatusChange(markerId: string, status: MarkerStatus) {
@@ -211,7 +260,7 @@
 
 	// Manage iframe loading state
 	$effect(() => {
-		if (pageViewerStore.isOpen && !useScreenshot) {
+		if (pageViewerStore.isOpen) {
 			if (!iframeSrc) {
 				iframeSrc = pageViewerStore.pageUrl;
 			}
@@ -324,57 +373,93 @@
 			</div>
 		</header>
 
+		<!-- Viewport toolbar -->
+		<div class="flex items-center gap-3 px-4 py-1.5 border-b bg-gray-50">
+			<div class="flex items-center gap-1">
+				{#each [{ label: 'Mobile', w: 375 }, { label: 'Tablet', w: 768 }, { label: 'Desktop', w: 1280 }] as preset (preset.w)}
+					<button
+						onclick={() => (iframeWidth = preset.w)}
+						class="px-2.5 py-1 rounded text-xs font-medium transition-colors"
+						class:bg-blue-500={iframeWidth === preset.w}
+						class:text-white={iframeWidth === preset.w}
+						class:text-gray-600={iframeWidth !== preset.w}
+						class:hover:bg-gray-200={iframeWidth !== preset.w}
+					>
+						{preset.label}
+					</button>
+				{/each}
+				<button
+					onclick={() => (iframeWidth = 'auto')}
+					class="px-2.5 py-1 rounded text-xs font-medium transition-colors"
+					class:bg-blue-500={iframeWidth === 'auto'}
+					class:text-white={iframeWidth === 'auto'}
+					class:text-gray-600={iframeWidth !== 'auto'}
+					class:hover:bg-gray-200={iframeWidth !== 'auto'}
+				>
+					Full
+				</button>
+			</div>
+			<span class="font-mono text-xs text-gray-500 tabular-nums">
+				{iframeWidth === 'auto' ? `${containerWidth}px` : `${effectiveWidth}px`}
+			</span>
+			{#if activeMarkerViewportWidth && iframeWidth === activeMarkerViewportWidth}
+				<span class="text-xs text-blue-500">Marker viewport ({activeMarkerViewportWidth}px)</span>
+			{/if}
+		</div>
+
 		<!-- Main content area with sidebar -->
 		<div class="flex-1 flex overflow-hidden">
-			<div class="flex-1 relative overflow-hidden bg-gray-100">
-				{#if useScreenshot}
-					<div class="absolute inset-0 overflow-auto">
-						{#if pageViewerStore.screenshotUrl}
-							<div class="relative inline-block min-w-full">
-								<img src={pageViewerStore.screenshotUrl} alt={pageViewerStore.pageTitle} class="block max-w-none" />
+			<div class="flex-1 relative overflow-hidden bg-gray-100 flex items-stretch justify-center" bind:this={containerRef}>
+				{#if !iframeLoaded}
+					<div class="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
+						<div class="text-center">
+							<svg class="w-12 h-12 mx-auto mb-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+							</svg>
+							<p class="text-gray-500">Loading page...</p>
+						</div>
+					</div>
+				{/if}
+
+				{#if iframeError}
+					<div class="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
+						<div class="text-center max-w-md px-4">
+							<svg class="w-16 h-16 mx-auto mb-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+							</svg>
+							<p class="text-gray-700 font-medium mb-2">This site cannot be loaded in the viewer</p>
+							<p class="text-gray-500 text-sm mb-4">Some sites block embedding for security reasons (X-Frame-Options).</p>
+						</div>
+					</div>
+				{/if}
+
+				{#if iframeSrc && !iframeError}
+					<div
+						class="relative h-full bg-white"
+						class:shadow-lg={iframeWidth !== 'auto'}
+						class:transition-[width]={!isResizing}
+						class:duration-300={!isResizing}
+						class:ease-out={!isResizing}
+						style:width={iframeWidth === 'auto' ? '100%' : `${effectiveWidth}px`}
+						style:max-width="100%"
+					>
+						{#if iframeWidth !== 'auto'}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize z-20 group"
+								onmousedown={(e) => startResize(e, 'left')}
+							>
+								<div class="absolute left-0 top-0 bottom-0 w-1 bg-transparent group-hover:bg-blue-400 transition-colors"></div>
 							</div>
-						{:else}
-							<div class="w-full h-full flex items-center justify-center text-gray-400">
-								<div class="text-center">
-									<svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-									</svg>
-									<p>No screenshot available</p>
-								</div>
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize z-20 group"
+								onmousedown={(e) => startResize(e, 'right')}
+							>
+								<div class="absolute right-0 top-0 bottom-0 w-1 bg-transparent group-hover:bg-blue-400 transition-colors"></div>
 							</div>
 						{/if}
-					</div>
-				{:else}
-					{#if !iframeLoaded}
-						<div class="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
-							<div class="text-center">
-								<svg class="w-12 h-12 mx-auto mb-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-								</svg>
-								<p class="text-gray-500">Loading page...</p>
-							</div>
-						</div>
-					{/if}
-
-					{#if iframeError}
-						<div class="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
-							<div class="text-center max-w-md px-4">
-								<svg class="w-16 h-16 mx-auto mb-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-								</svg>
-								<p class="text-gray-700 font-medium mb-2">This site cannot be loaded in the viewer</p>
-								<p class="text-gray-500 text-sm mb-4">Some sites block embedding for security reasons (X-Frame-Options).</p>
-								{#if pageViewerStore.screenshotUrl}
-									<button onclick={switchToScreenshot} class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">
-										View screenshot instead
-									</button>
-								{/if}
-							</div>
-						</div>
-					{/if}
-
-					{#if iframeSrc && !iframeError}
 						<iframe
 							bind:this={iframeRef}
 							src={iframeSrc}
@@ -383,11 +468,11 @@
 							onload={handleIframeLoad}
 							onerror={handleIframeError}
 						></iframe>
-					{/if}
+					</div>
 				{/if}
 			</div>
 
-			{#if showFeedbackSidebar && !useScreenshot}
+			{#if showFeedbackSidebar}
 				<FeedbackSidebar
 					markers={feedbackMarkers}
 					{highlightedMarkerId}

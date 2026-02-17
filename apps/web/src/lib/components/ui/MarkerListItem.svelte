@@ -75,6 +75,7 @@
 				<div class="flex items-center justify-between gap-2">
 					<div class="flex items-center gap-2">
 						<span class="text-xs font-mono text-gray-500">{marker.anchor.tagName}</span>
+						<span class="text-xs font-mono text-gray-400">{marker.viewport.width}px</span>
 						<span
 							class="text-xs px-1.5 py-0.5 rounded"
 							class:bg-orange-100={marker.status === 'open'}
