@@ -4,6 +4,7 @@ export interface FeedbackStats {
 	total: number;
 	open: number;
 	resolved: number;
+	archived: number;
 	allResolved: boolean;
 }
 
@@ -117,7 +118,7 @@ export interface ProjectCachedData {
 // Feedback marker types (from inspected app via postMessage)
 // ============================================================
 
-export type MarkerStatus = 'open' | 'resolved';
+export type MarkerStatus = 'open' | 'resolved' | 'archived';
 export interface FeedbackComment {
 	id: string;
 	author: string;

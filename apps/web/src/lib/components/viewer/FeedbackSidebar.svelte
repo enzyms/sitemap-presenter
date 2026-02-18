@@ -24,7 +24,7 @@
 		onComment
 	}: Props = $props();
 
-	let statusFilter = $state<'all' | 'open' | 'resolved'>('all');
+	let statusFilter = $state<'all' | 'open' | 'resolved' | 'archived'>('all');
 	let expandedMarkerId = $state<string | null>(null);
 	let openMenuId = $state<string | null>(null);
 
@@ -38,6 +38,7 @@
 
 	let openCount = $derived(markers.filter((m) => m.status === 'open').length);
 	let resolvedCount = $derived(markers.filter((m) => m.status === 'resolved').length);
+	let archivedCount = $derived(markers.filter((m) => m.status === 'archived').length);
 
 	function toggleMenu(event: MouseEvent, markerId: string): void {
 		event.stopPropagation();
@@ -52,8 +53,15 @@
 
 	function handleStatusToggle(event: MouseEvent, marker: FeedbackMarker): void {
 		event.stopPropagation();
-		const newStatus: MarkerStatus = marker.status === 'open' ? 'resolved' : 'open';
+		const newStatus: MarkerStatus =
+			marker.status === 'open' ? 'resolved' : marker.status === 'resolved' ? 'archived' : 'open';
 		onStatusChange(marker.id, newStatus);
+		openMenuId = null;
+	}
+
+	function handleReopen(event: MouseEvent, marker: FeedbackMarker): void {
+		event.stopPropagation();
+		onStatusChange(marker.id, 'open');
 		openMenuId = null;
 	}
 
@@ -125,6 +133,7 @@
 				<option value="all">All markers ({markers.length})</option>
 				<option value="open">Open only ({openCount})</option>
 				<option value="resolved">Resolved only ({resolvedCount})</option>
+				<option value="archived">Archived only ({archivedCount})</option>
 			</select>
 		</div>
 	{/if}
@@ -166,6 +175,7 @@
 						ontogglemenu={(e) => toggleMenu(e, marker.id)}
 						onexpandcomments={(e) => handleExpandComments(e, marker.id)}
 						onstatustoggle={(e) => handleStatusToggle(e, marker)}
+						onreopen={(e) => handleReopen(e, marker)}
 						ondelete={(e) => handleDelete(e, marker.id)}
 						onyoutrack={(e) => openYoutrackModal(e, marker)}
 						onautofix={(e) => openAutofixModal(e, marker)}

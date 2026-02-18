@@ -152,16 +152,18 @@
 			}
 
 			// Group markers by page_path
-			const markersByPath: Record<string, { total: number; open: number; resolved: number }> = {};
+			const markersByPath: Record<string, { total: number; open: number; resolved: number; archived: number }> = {};
 			for (const marker of markers || []) {
 				if (!markersByPath[marker.page_path]) {
-					markersByPath[marker.page_path] = { total: 0, open: 0, resolved: 0 };
+					markersByPath[marker.page_path] = { total: 0, open: 0, resolved: 0, archived: 0 };
 				}
 				markersByPath[marker.page_path].total++;
 				if (marker.status === 'open') {
 					markersByPath[marker.page_path].open++;
-				} else {
+				} else if (marker.status === 'resolved') {
 					markersByPath[marker.page_path].resolved++;
+				} else {
+					markersByPath[marker.page_path].archived++;
 				}
 			}
 
@@ -180,6 +182,7 @@
 									total: stats.total,
 									open: stats.open,
 									resolved: stats.resolved,
+									archived: stats.archived,
 									allResolved: stats.total > 0 && stats.open === 0
 								} as FeedbackStats
 							}

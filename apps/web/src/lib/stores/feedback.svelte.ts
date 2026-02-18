@@ -28,6 +28,8 @@ class FeedbackStore {
 
 	resolvedCount = $derived.by(() => this.markers.filter((m) => m.status === 'resolved').length);
 
+	archivedCount = $derived.by(() => this.markers.filter((m) => m.status === 'archived').length);
+
 	async initializeBySiteId(siteId: string): Promise<boolean> {
 		this.loading = true;
 		this.error = null;

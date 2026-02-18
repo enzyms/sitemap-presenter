@@ -38,11 +38,11 @@
 
 		// Fall back to computing from projects store
 		if (!projectsStore.currentProjectId) {
-			return { total: 0, open: 0, resolved: 0, allResolved: false };
+			return { total: 0, open: 0, resolved: 0, archived: 0, allResolved: false };
 		}
 		const project = projectsStore.projects.find(p => p.id === projectsStore.currentProjectId);
 		if (!project?.cachedData?.feedbackMarkers) {
-			return { total: 0, open: 0, resolved: 0, allResolved: false };
+			return { total: 0, open: 0, resolved: 0, archived: 0, allResolved: false };
 		}
 
 		try {
@@ -51,14 +51,16 @@
 			const markers = project.cachedData.feedbackMarkers[pagePath] || [];
 			const open = markers.filter(m => m.status === 'open').length;
 			const resolved = markers.filter(m => m.status === 'resolved').length;
+			const archived = markers.filter(m => m.status === 'archived').length;
 			return {
 				total: markers.length,
 				open,
 				resolved,
+				archived,
 				allResolved: markers.length > 0 && open === 0
 			};
 		} catch {
-			return { total: 0, open: 0, resolved: 0, allResolved: false };
+			return { total: 0, open: 0, resolved: 0, archived: 0, allResolved: false };
 		}
 	});
 

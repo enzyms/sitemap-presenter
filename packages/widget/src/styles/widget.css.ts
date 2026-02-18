@@ -128,6 +128,10 @@ export const widgetStyles = `
     background: var(--success-color);
   }
 
+  .marker-bubble.archived {
+    background: var(--gray-400);
+  }
+
   .marker-bubble.highlighted {
     transform: translate(-50%, -50%) scale(1.3);
     box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.3);
@@ -156,7 +160,7 @@ export const widgetStyles = `
     height: 16px;
   }
 
-  /* Comments panel wrapper (replaces feedback-comments-panel custom element) */
+  /* Comments panel wrapper */
   .comments-panel-wrapper {
     position: fixed;
     z-index: 999999;
@@ -166,18 +170,20 @@ export const widgetStyles = `
     font-size: 14px;
     line-height: 1.5;
     color: var(--gray-800);
+    border: 4px solid color-mix(in srgb, var(--primary-color) 30%, transparent);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
   }
 
   /* Comments panel - inner container */
   .comments-panel {
-    width: 260px;
-    max-height: 400px;
+    width: 300px;
+    max-height: 450px;
     background: #f8f9fa;
-    border-radius: 8px;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-    overflow: hidden;
     display: flex;
     flex-direction: column;
+    border: 2px solid white;
   }
 
   .comments-panel-header {
@@ -206,23 +212,26 @@ export const widgetStyles = `
     background: var(--success-color);
   }
 
+  .comments-panel-header .marker-number.archived {
+    background: var(--gray-400);
+  }
+
   .comments-panel-close {
-    width: 22px;
-    height: 22px;
+    padding: 4px;
     border: none;
     background: transparent;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #000;
-    font-size: 18px;
-    line-height: 1;
-    padding: 0;
+    color: var(--gray-400);
+    border-radius: 6px;
+    transition: all 0.15s;
   }
 
   .comments-panel-close:hover {
-    opacity: 0.6;
+    color: var(--gray-600);
+    background: var(--gray-100);
   }
 
   .comments-panel-body {
@@ -325,36 +334,120 @@ export const widgetStyles = `
 
   .comments-panel-footer {
     display: flex;
-    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
     padding: 10px 12px;
     background: #f8f9fa;
   }
 
-  .action-btn {
-    padding: 4px 11px;
-    border: 1px solid #cbcbcb;
-    background: transparent;
+  /* Primary action button (Resolve / Archive / Reopen) */
+  .primary-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border: none;
     border-radius: 6px;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
+    transition: all 0.15s;
+    color: white;
+  }
+
+  .primary-action-btn svg {
+    flex-shrink: 0;
+  }
+
+  .primary-action-btn.resolve {
+    background: #16a34a;
+  }
+
+  .primary-action-btn.resolve:hover {
+    background: #15803d;
+  }
+
+  .primary-action-btn.archive {
+    background: var(--gray-500);
+  }
+
+  .primary-action-btn.archive:hover {
+    background: var(--gray-600);
+  }
+
+  .primary-action-btn.reopen {
+    background: var(--primary-color);
+  }
+
+  .primary-action-btn.reopen:hover {
+    background: var(--primary-hover);
+  }
+
+  /* Kebab (falafel) menu */
+  .kebab-menu {
+    position: relative;
+  }
+
+  .kebab-trigger {
+    padding: 4px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray-500);
     transition: all 0.15s;
   }
 
-  .action-btn:hover {
-    border-color: var(--gray-400);
+  .kebab-trigger:hover {
+    background: var(--gray-200);
   }
 
-  .action-btn.delete {
+  .kebab-dropdown {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 4px;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+    min-width: 140px;
+    z-index: 10;
+  }
+
+  .kebab-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--gray-700);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .kebab-item:hover {
+    background: var(--gray-50);
+  }
+
+  .kebab-item.delete {
     color: #d51212;
   }
 
-  .action-btn.resolve {
-    color: #25ab52;
+  .kebab-item.delete:hover {
+    background: #fef2f2;
   }
 
-  .action-btn.reopen {
-    color: var(--primary-color);
+  .kebab-item svg {
+    flex-shrink: 0;
   }
 
   /* Element highlight during placement */

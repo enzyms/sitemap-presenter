@@ -59,6 +59,13 @@ export class FeedbackWidget extends HTMLElement {
   // Debounce timer for visibility reporting
   private visibilityDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Click-outside handler for closing the comments panel
+  private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
+
+  // Reposition mode state (triggered from panel's "Move marker" button)
+  private isRepositioning = false;
+  private repositioningMarkerId: string | null = null;
+
   constructor() {
     super();
     this.shadow = this.attachShadow({ mode: 'open' });
@@ -258,7 +265,7 @@ export class FeedbackWidget extends HTMLElement {
       const bubble = new MarkerBubble();
       bubble.setMarker(marker);
 
-      // Add click handler
+      // Click to open comments panel
       bubble.element.addEventListener('click', () => this.openCommentsPanel(marker));
 
       this.markersContainer.appendChild(bubble.element);
@@ -717,6 +724,9 @@ export class FeedbackWidget extends HTMLElement {
         } catch (error) {
           console.error('[FeedbackWidget] Failed to delete marker:', error);
         }
+      },
+      onMove: (markerId) => {
+        this.enterRepositionMode(markerId);
       }
     };
 
@@ -737,9 +747,30 @@ export class FeedbackWidget extends HTMLElement {
         bubble.setHighlighted(true);
       }
     }
+
+    // Click outside to close — defer so the opening click doesn't trigger it
+    requestAnimationFrame(() => {
+      this.outsideClickHandler = (e: MouseEvent) => {
+        const path = e.composedPath();
+        const isInsidePanel = this.commentsPanel && path.includes(this.commentsPanel.element);
+        const isInsideBubble = path.some(el =>
+          el instanceof HTMLElement && el.classList?.contains('marker-bubble-wrapper')
+        );
+        if (!isInsidePanel && !isInsideBubble) {
+          this.closeCommentsPanel();
+        }
+      };
+      document.addEventListener('mousedown', this.outsideClickHandler, true);
+    });
   }
 
   private closeCommentsPanel() {
+    // Remove outside-click listener
+    if (this.outsideClickHandler) {
+      document.removeEventListener('mousedown', this.outsideClickHandler, true);
+      this.outsideClickHandler = null;
+    }
+
     if (this.commentsPanel) {
       // Remove highlight from marker
       if (this.activeMarkerId) {
@@ -752,6 +783,137 @@ export class FeedbackWidget extends HTMLElement {
       this.commentsPanel.destroy();
       this.commentsPanel = null;
       this.activeMarkerId = null;
+    }
+  }
+
+  // ============================================================
+  // Reposition marker mode (triggered from panel's "Move marker")
+  // ============================================================
+
+  private enterRepositionMode(markerId: string) {
+    this.closeCommentsPanel();
+    this.isRepositioning = true;
+    this.repositioningMarkerId = markerId;
+    this.hoveredElement = null;
+
+    document.body.style.cursor = 'crosshair';
+
+    if (this.cancelButton) {
+      this.cancelButton.textContent = 'Press ESC or click here to cancel move';
+      this.cancelButton.style.display = 'block';
+    }
+
+    document.addEventListener('mousemove', this.handleRepositionMouseMove);
+    document.addEventListener('click', this.handleRepositionClick, true);
+    document.addEventListener('keydown', this.handleRepositionKeyDown);
+  }
+
+  private exitRepositionMode() {
+    this.isRepositioning = false;
+    this.repositioningMarkerId = null;
+    this.hoveredElement = null;
+
+    document.body.style.cursor = '';
+
+    if (this.highlightOverlay) {
+      this.highlightOverlay.style.display = 'none';
+    }
+
+    if (this.cancelButton) {
+      this.cancelButton.style.display = 'none';
+    }
+
+    document.removeEventListener('mousemove', this.handleRepositionMouseMove);
+    document.removeEventListener('click', this.handleRepositionClick, true);
+    document.removeEventListener('keydown', this.handleRepositionKeyDown);
+  }
+
+  private handleRepositionMouseMove = (e: MouseEvent) => {
+    if (!this.isRepositioning || !this.highlightOverlay) return;
+
+    const element = this.getElementAtPoint(e.clientX, e.clientY);
+    if (element) {
+      this.hoveredElement = element;
+      const rect = element.getBoundingClientRect();
+      this.highlightOverlay.style.display = 'block';
+      this.highlightOverlay.style.left = `${rect.left}px`;
+      this.highlightOverlay.style.top = `${rect.top}px`;
+      this.highlightOverlay.style.width = `${rect.width}px`;
+      this.highlightOverlay.style.height = `${rect.height}px`;
+    }
+  };
+
+  private handleRepositionClick = async (e: MouseEvent) => {
+    if (!this.isRepositioning) return;
+
+    const target = e.target as Element;
+    if (this.isWidgetElement(target)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const element = this.hoveredElement || this.getElementAtPoint(e.clientX, e.clientY);
+    const markerId = this.repositioningMarkerId;
+    this.exitRepositionMode();
+
+    if (!element || !markerId) return;
+    await this.repositionMarker(markerId, element, e.clientX, e.clientY);
+  };
+
+  private handleRepositionKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      this.exitRepositionMode();
+    }
+  };
+
+  private async repositionMarker(markerId: string, element: Element, clientX: number, clientY: number) {
+    if (!this.api) return;
+
+    const rect = element.getBoundingClientRect();
+    const offsetX = clientX - rect.left;
+    const offsetY = clientY - rect.top;
+
+    const anchor: ElementAnchor = {
+      selector: this.getCssSelector(element),
+      xpath: this.getXPath(element),
+      innerText: this.getInnerTextSnippet(element),
+      tagName: element.tagName,
+      offsetX,
+      offsetY
+    };
+
+    const fallback_position: FallbackPosition = {
+      xPercent: ((clientX + window.scrollX) / document.documentElement.scrollWidth) * 100,
+      yPercent: ((clientY + window.scrollY) / document.documentElement.scrollHeight) * 100
+    };
+
+    const viewport: ViewportInfo = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+      devicePixelRatio: window.devicePixelRatio,
+      timestamp: new Date().toISOString()
+    };
+
+    try {
+      await this.api.updateMarker(markerId, { anchor, fallback_position, viewport });
+
+      // Update local state
+      this.markers = this.markers.map(m =>
+        m.id === markerId ? { ...m, anchor, fallback_position, viewport } : m
+      );
+      this.renderMarkers();
+
+      // Notify parent
+      if (this.isInIframe) {
+        const updatedMarker = this.markers.find(m => m.id === markerId);
+        if (updatedMarker) {
+          this.notifyParentOfMarkerUpdated(updatedMarker);
+        }
+      }
+    } catch (error) {
+      console.error('[FeedbackWidget] Failed to reposition marker:', error);
     }
   }
 
@@ -796,6 +958,15 @@ export class FeedbackWidget extends HTMLElement {
     if (this.visibilityDebounceTimer) {
       clearTimeout(this.visibilityDebounceTimer);
       this.visibilityDebounceTimer = null;
+    }
+
+    if (this.outsideClickHandler) {
+      document.removeEventListener('mousedown', this.outsideClickHandler, true);
+      this.outsideClickHandler = null;
+    }
+
+    if (this.isRepositioning) {
+      this.exitRepositionMode();
     }
 
     if (this.unsubscribe) {

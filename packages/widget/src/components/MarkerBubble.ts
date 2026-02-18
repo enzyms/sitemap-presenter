@@ -31,10 +31,10 @@ export class MarkerBubble {
   private render() {
     if (!this.marker) return;
 
-    const isResolved = this.marker.status === 'resolved';
+    const statusClass = this.marker.status === 'archived' ? 'archived' : this.marker.status === 'resolved' ? 'resolved' : '';
 
     this.element.innerHTML = `
-      <div class="marker-bubble ${isResolved ? 'resolved' : ''} ${this.highlighted ? 'highlighted' : ''}"
+      <div class="marker-bubble ${statusClass} ${this.highlighted ? 'highlighted' : ''}"
            data-marker-id="${this.marker.id}"
            title="Click to view comments">
         ${this.marker.number}

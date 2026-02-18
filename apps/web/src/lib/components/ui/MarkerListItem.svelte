@@ -12,6 +12,7 @@
 		ontogglemenu: (event: MouseEvent) => void;
 		onexpandcomments: (event: MouseEvent) => void;
 		onstatustoggle: (event: MouseEvent) => void;
+		onreopen: (event: MouseEvent) => void;
 		ondelete: (event: MouseEvent) => void;
 		onyoutrack: (event: MouseEvent) => void;
 		onautofix: (event: MouseEvent) => void;
@@ -28,6 +29,7 @@
 		ontogglemenu,
 		onexpandcomments,
 		onstatustoggle,
+		onreopen,
 		ondelete,
 		onyoutrack,
 		onautofix,
@@ -66,6 +68,7 @@
 				class="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
 				class:bg-orange-500={marker.status === 'open'}
 				class:bg-green-500={marker.status === 'resolved'}
+				class:bg-gray-400={marker.status === 'archived'}
 			>
 				{marker.number}
 			</div>
@@ -82,6 +85,8 @@
 							class:text-orange-700={marker.status === 'open'}
 							class:bg-green-100={marker.status === 'resolved'}
 							class:text-green-700={marker.status === 'resolved'}
+							class:bg-gray-100={marker.status === 'archived'}
+							class:text-gray-600={marker.status === 'archived'}
 						>
 							{marker.status}
 						</span>
@@ -137,22 +142,38 @@
 										Autofix
 									</button>
 								{/if}
+								{#if marker.status === 'open'}
 								<button
 									onclick={onstatustoggle}
 									class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
 								>
-									{#if marker.status === 'open'}
-										<svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-										</svg>
-										Mark resolved
-									{:else}
-										<svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-										</svg>
-										Reopen
-									{/if}
+									<svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+									</svg>
+									Mark resolved
 								</button>
+							{:else if marker.status === 'resolved'}
+								<button
+									onclick={onstatustoggle}
+									class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+								>
+									<svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v1a2 2 0 01-2 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+									</svg>
+									Archive
+								</button>
+							{/if}
+							{#if marker.status !== 'open'}
+								<button
+									onclick={onreopen}
+									class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+								>
+									<svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+									</svg>
+									Reopen
+								</button>
+							{/if}
 								<button
 									onclick={ondelete}
 									class="w-full px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"

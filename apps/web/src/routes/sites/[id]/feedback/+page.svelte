@@ -8,7 +8,7 @@
 
 	let siteId = $derived($page.params.id!);
 
-	let statusFilter = $state<'all' | 'open' | 'resolved'>('all');
+	let statusFilter = $state<'all' | 'open' | 'resolved' | 'archived'>('all');
 	let pageFilter = $state<string | null>(null);
 	let expandedMarkerId = $state<string | null>(null);
 	let commentText = $state('');
@@ -96,6 +96,12 @@
 						<span class="text-gray-700 font-medium">{feedbackStore.resolvedCount} resolved</span>
 					</div>
 				{/if}
+				{#if feedbackStore.archivedCount > 0}
+					<div class="flex items-center gap-2">
+						<span class="w-3 h-3 bg-gray-400 rounded-full"></span>
+						<span class="text-gray-700 font-medium">{feedbackStore.archivedCount} archived</span>
+					</div>
+				{/if}
 			{/if}
 		</div>
 	</div>
@@ -154,6 +160,7 @@
 					<option value="all">All status ({feedbackStore.markers.length})</option>
 					<option value="open">Open ({feedbackStore.openCount})</option>
 					<option value="resolved">Resolved ({feedbackStore.resolvedCount})</option>
+					<option value="archived">Archived ({feedbackStore.archivedCount})</option>
 				</select>
 
 				<select
@@ -205,6 +212,7 @@
 												class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
 												class:bg-orange-500={marker.status === 'open'}
 												class:bg-green-500={marker.status === 'resolved'}
+												class:bg-gray-400={marker.status === 'archived'}
 											>
 												{marker.number}
 											</div>
@@ -220,6 +228,8 @@
 														class:text-orange-700={marker.status === 'open'}
 														class:bg-green-100={marker.status === 'resolved'}
 														class:text-green-700={marker.status === 'resolved'}
+														class:bg-gray-100={marker.status === 'archived'}
+														class:text-gray-600={marker.status === 'archived'}
 													>
 														{marker.status}
 													</span>
@@ -327,7 +337,17 @@
 														<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 														</svg>
-														Mark Resolved
+														Resolve
+													</button>
+												{:else if marker.status === 'resolved'}
+													<button
+														onclick={() => handleStatusChange(marker.id, 'archived')}
+														class="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg text-sm font-medium hover:bg-gray-600 transition-colors"
+													>
+														<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v1a2 2 0 01-2 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+														</svg>
+														Archive
 													</button>
 												{:else}
 													<button

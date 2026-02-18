@@ -231,11 +231,15 @@ export class FeedbackAPI {
   async updateMarker(markerId: string, request: UpdateMarkerRequest): Promise<Marker> {
     if (!this.siteId) throw new Error('Site not initialized');
 
+    const updates: Record<string, unknown> = {};
+    if (request.status !== undefined) updates.status = request.status;
+    if (request.anchor !== undefined) updates.anchor = request.anchor;
+    if (request.fallback_position !== undefined) updates.fallback_position = request.fallback_position;
+    if (request.viewport !== undefined) updates.viewport = request.viewport;
+
     const { data, error } = await this.supabase
       .from('markers')
-      .update({
-        status: request.status
-      })
+      .update(updates)
       .eq('id', markerId)
       .eq('site_id', this.siteId)
       .select('*')

@@ -68,7 +68,7 @@ export interface Comment {
 // Nested types
 // ============================================================
 
-export type MarkerStatus = 'open' | 'resolved';
+export type MarkerStatus = 'open' | 'resolved' | 'archived';
 
 export interface ElementAnchor {
   /** CSS selector to find the element */
@@ -155,6 +155,9 @@ export interface CreateCommentRequest {
 
 export interface UpdateMarkerRequest {
   status?: MarkerStatus;
+  anchor?: ElementAnchor;
+  fallback_position?: FallbackPosition;
+  viewport?: ViewportInfo;
 }
 
 // ============================================================
