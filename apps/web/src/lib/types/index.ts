@@ -198,12 +198,19 @@ export interface HighlightMarkerMessage {
 	markerId: string | null;
 }
 
+/** Filter visible markers by status */
+export interface StatusFilterMessage {
+	type: 'FEEDBACK_STATUS_FILTER';
+	status: 'all' | MarkerStatus;
+}
+
 export type SitemapToIframeMessage =
 	| GetFeedbackMarkersMessage
 	| UpdateMarkerStatusMessage
 	| AddMarkerCommentMessage
 	| DeleteMarkerMessage
-	| HighlightMarkerMessage;
+	| HighlightMarkerMessage
+	| StatusFilterMessage;
 
 // --- Messages FROM iframe TO sitemap-presenter ---
 

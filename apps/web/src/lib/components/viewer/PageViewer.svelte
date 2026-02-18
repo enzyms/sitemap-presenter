@@ -277,6 +277,10 @@
 		messenger.addComment(markerId, content);
 	}
 
+	function handleFilterChange(status: 'all' | MarkerStatus) {
+		messenger.filterByStatus(status);
+	}
+
 	// Manage iframe loading state
 	$effect(() => {
 		if (pageViewerStore.isOpen) {
@@ -511,6 +515,7 @@
 					onStatusChange={handleMarkerStatusChange}
 					onDelete={handleMarkerDelete}
 					onComment={handleMarkerComment}
+					onFilterChange={handleFilterChange}
 				/>
 			{/if}
 		</div>

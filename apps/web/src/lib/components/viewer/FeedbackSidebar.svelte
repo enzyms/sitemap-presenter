@@ -12,6 +12,7 @@
 		onStatusChange: (markerId: string, status: MarkerStatus) => void;
 		onDelete: (markerId: string) => void;
 		onComment: (markerId: string, content: string) => void;
+		onFilterChange: (status: 'all' | MarkerStatus) => void;
 	}
 
 	let {
@@ -21,7 +22,8 @@
 		onMarkerClick,
 		onStatusChange,
 		onDelete,
-		onComment
+		onComment,
+		onFilterChange
 	}: Props = $props();
 
 	let statusFilter = $state<'all' | 'open' | 'resolved' | 'archived'>('all');
@@ -128,6 +130,7 @@
 		<div class="px-4 py-2 border-b">
 			<select
 				bind:value={statusFilter}
+				onchange={() => onFilterChange(statusFilter)}
 				class="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
 			>
 				<option value="all">All markers ({markers.length})</option>

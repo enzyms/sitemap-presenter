@@ -50,6 +50,10 @@ export class IframeMessenger {
 		this.send({ type: 'FEEDBACK_HIGHLIGHT_MARKER', markerId });
 	}
 
+	filterByStatus(status: 'all' | MarkerStatus): void {
+		this.send({ type: 'FEEDBACK_STATUS_FILTER', status });
+	}
+
 	/**
 	 * Starts listening for messages from the iframe.
 	 * Returns a cleanup function to stop listening.

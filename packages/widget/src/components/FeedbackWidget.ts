@@ -62,6 +62,9 @@ export class FeedbackWidget extends HTMLElement {
   // Click-outside handler for closing the comments panel
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
 
+  // Status filter from parent sidebar
+  private statusFilter: string = 'all';
+
   // Reposition mode state (triggered from panel's "Move marker" button)
   private isRepositioning = false;
   private repositioningMarkerId: string | null = null;
@@ -946,6 +949,16 @@ export class FeedbackWidget extends HTMLElement {
 
   private updateMarkerVisibility() {
     for (const bubble of this.markerBubbles) {
+      const markerId = bubble.getMarkerId();
+      const marker = markerId ? this.markers.find(m => m.id === markerId) : null;
+
+      // Hide if status doesn't match filter
+      if (marker && this.statusFilter !== 'all' && marker.status !== this.statusFilter) {
+        bubble.element.style.display = 'none';
+        continue;
+      }
+
+      // Otherwise apply anchor-based visibility
       bubble.updateVisibility();
     }
   }
@@ -1081,6 +1094,10 @@ export class FeedbackWidget extends HTMLElement {
         break;
       case 'FEEDBACK_HIGHLIGHT_MARKER':
         this.handleHighlightMarkerRequest(data.markerId);
+        break;
+      case 'FEEDBACK_STATUS_FILTER':
+        this.statusFilter = data.status;
+        this.updateMarkerVisibility();
         break;
     }
   }
