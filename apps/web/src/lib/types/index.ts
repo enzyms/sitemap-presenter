@@ -247,13 +247,20 @@ export interface NavigationMessage {
 	markers: FeedbackMarker[]; // All markers included directly
 }
 
+/** Visibility report: which marker anchors are visible at the current viewport width */
+export interface MarkersVisibilityMessage {
+	type: 'FEEDBACK_MARKERS_VISIBILITY';
+	visibility: Record<string, boolean>; // markerId → visible
+}
+
 export type IframeToSitemapMessage =
 	| MarkersResponseMessage
 	| MarkerCreatedMessage
 	| MarkerUpdatedMessage
 	| MarkerDeletedMessage
 	| ActionConfirmMessage
-	| NavigationMessage;
+	| NavigationMessage
+	| MarkersVisibilityMessage;
 
 // API response types
 export interface StartCrawlResponse {

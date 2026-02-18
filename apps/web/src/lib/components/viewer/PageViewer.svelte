@@ -40,6 +40,22 @@
 
 	let feedbackMarkers = $derived(feedbackStore.markersForCurrentPage.map(convertSupabaseMarkerToFeedback));
 
+	// Static breakpoint ranges for Phase 1
+	const BREAKPOINTS = [
+		{ label: 'Mobile', width: 375, min: 0, max: 768 },
+		{ label: 'Tablet', width: 768, min: 768, max: 1280 },
+		{ label: 'Desktop', width: 1280, min: 1280, max: Infinity }
+	];
+
+	let markerCountsByRange = $derived(
+		BREAKPOINTS.map((bp) => ({
+			...bp,
+			count: feedbackMarkers.filter(
+				(m) => m.viewport.width >= bp.min && m.viewport.width < bp.max
+			).length
+		}))
+	);
+
 	// Feedback navigation
 	let feedbackNodeCount = $derived(sitemapStore.nodesWithFeedback.length);
 	let currentFeedbackIndex = $derived.by(() => {
@@ -117,6 +133,7 @@
 		iframeSrc = null;
 		iframeWidth = 'auto';
 		isResizing = false;
+
 		if (loadTimeout) clearTimeout(loadTimeout);
 	}
 
@@ -139,6 +156,7 @@
 		iframeSrc = null;
 		highlightedMarkerId = null;
 		iframeWidth = 'auto';
+
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
@@ -210,6 +228,7 @@
 
 		// Reset viewport to full width on page change
 		iframeWidth = 'auto';
+
 
 		// Find & select the matching node
 		const matchingNode = findNodeByUrl(newUrl);
@@ -376,16 +395,27 @@
 		<!-- Viewport toolbar -->
 		<div class="flex items-center gap-3 px-4 py-1.5 border-b bg-gray-50">
 			<div class="flex items-center gap-1">
-				{#each [{ label: 'Mobile', w: 375 }, { label: 'Tablet', w: 768 }, { label: 'Desktop', w: 1280 }] as preset (preset.w)}
+				{#each markerCountsByRange as preset (preset.width)}
 					<button
-						onclick={() => (iframeWidth = preset.w)}
-						class="px-2.5 py-1 rounded text-xs font-medium transition-colors"
-						class:bg-blue-500={iframeWidth === preset.w}
-						class:text-white={iframeWidth === preset.w}
-						class:text-gray-600={iframeWidth !== preset.w}
-						class:hover:bg-gray-200={iframeWidth !== preset.w}
+						onclick={() => (iframeWidth = preset.width)}
+						class="px-2.5 py-1 rounded text-xs font-medium transition-colors inline-flex items-center gap-1"
+						class:bg-blue-500={iframeWidth === preset.width}
+						class:text-white={iframeWidth === preset.width}
+						class:text-gray-600={iframeWidth !== preset.width}
+						class:hover:bg-gray-200={iframeWidth !== preset.width}
 					>
 						{preset.label}
+						{#if preset.count > 0}
+							<span
+								class="px-1 py-0.5 text-[10px] leading-none rounded-full"
+								class:bg-blue-400={iframeWidth === preset.width}
+								class:text-white={iframeWidth === preset.width}
+								class:bg-orange-100={iframeWidth !== preset.width}
+								class:text-orange-700={iframeWidth !== preset.width}
+							>
+								{preset.count}
+							</span>
+						{/if}
 					</button>
 				{/each}
 				<button

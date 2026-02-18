@@ -41,8 +41,8 @@ export class CommentsPanel {
   }
 
   positionNear(x: number, y: number) {
-    const panelWidth = 320;
-    const panelHeight = 400;
+    const panelWidth = 260;
+    const panelHeight = 300;
     const padding = 16;
 
     const viewportWidth = window.innerWidth;
@@ -84,53 +84,27 @@ export class CommentsPanel {
     this.element.innerHTML = `
       <div class="comments-panel">
         <div class="comments-panel-header">
-          <h3>
-            <span class="marker-number ${isResolved ? 'resolved' : ''}">${this.marker.number}</span>
-            Feedback
-          </h3>
-          <button class="comments-panel-close" data-action="close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
+          <span class="marker-number ${isResolved ? 'resolved' : ''}">${this.marker.number}</span>
+          <button class="comments-panel-close" data-action="close">&times;</button>
         </div>
 
-        <div class="comments-panel-body" data-comments-container>
-          ${this.renderCommentsHTML()}
-        </div>
-
-        <div class="marker-actions">
-          ${isResolved ? `
-            <button class="marker-action-btn reopen" data-action="reopen">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-              </svg>
-              Reopen
-            </button>
-          ` : `
-            <button class="marker-action-btn resolve" data-action="resolve">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M5 13l4 4L19 7"/>
-              </svg>
-              Resolve
-            </button>
-          `}
-          <button class="marker-action-btn delete" data-action="delete">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-            </svg>
-            Delete
-          </button>
+        <div class="comments-panel-body">
+          <div class="comments-list" data-comments-container>
+            ${this.renderCommentsHTML()}
+          </div>
+          <div class="comment-input-area">
+            <textarea class="comment-input" placeholder="Add a comment..." rows="2" data-comment-input></textarea>
+            <button class="comment-submit" data-action="submit" disabled>Send</button>
+          </div>
         </div>
 
         <div class="comments-panel-footer">
-          <div class="comment-input-wrapper">
-            <input type="text"
-                   class="comment-input"
-                   placeholder="Add a comment..."
-                   data-comment-input />
-            <button class="comment-submit" data-action="submit" disabled>Send</button>
-          </div>
+          <button class="action-btn delete" data-action="delete">Delete</button>
+          ${isResolved ? `
+            <button class="action-btn reopen" data-action="reopen">Reopen</button>
+          ` : `
+            <button class="action-btn resolve" data-action="resolve">Resolve</button>
+          `}
         </div>
       </div>
     `;
@@ -188,27 +162,28 @@ export class CommentsPanel {
       }
     });
 
-    // Comment input
-    const input = this.element.querySelector('[data-comment-input]') as HTMLInputElement;
+    // Comment textarea
+    const textarea = this.element.querySelector('[data-comment-input]') as HTMLTextAreaElement;
     const submitBtn = this.element.querySelector('[data-action="submit"]') as HTMLButtonElement;
 
-    if (input && submitBtn) {
-      input.addEventListener('input', () => {
-        submitBtn.disabled = !input.value.trim();
+    if (textarea && submitBtn) {
+      textarea.addEventListener('input', () => {
+        submitBtn.disabled = !textarea.value.trim();
       });
 
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && input.value.trim()) {
-          this.submitComment(input.value.trim());
-          input.value = '';
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && textarea.value.trim()) {
+          e.preventDefault();
+          this.submitComment(textarea.value.trim());
+          textarea.value = '';
           submitBtn.disabled = true;
         }
       });
 
       submitBtn.addEventListener('click', () => {
-        if (input.value.trim()) {
-          this.submitComment(input.value.trim());
-          input.value = '';
+        if (textarea.value.trim()) {
+          this.submitComment(textarea.value.trim());
+          textarea.value = '';
           submitBtn.disabled = true;
         }
       });

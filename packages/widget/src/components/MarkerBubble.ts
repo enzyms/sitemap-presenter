@@ -42,10 +42,9 @@ export class MarkerBubble {
     `;
   }
 
-  updatePosition() {
-    if (!this.marker) return;
+  private resolveAnchorElement(): Element | null {
+    if (!this.marker) return null;
 
-    // Try to find the element using the anchor
     let targetElement: Element | null = null;
 
     // Try CSS selector first
@@ -73,6 +72,29 @@ export class MarkerBubble {
       }
     }
 
+    return targetElement;
+  }
+
+  getAnchorVisibility(): { id: string; visible: boolean } | null {
+    if (!this.marker) return null;
+    const el = this.resolveAnchorElement();
+    if (!el) return { id: this.marker.id, visible: false };
+    const rect = el.getBoundingClientRect();
+    return { id: this.marker.id, visible: rect.width > 0 || rect.height > 0 };
+  }
+
+  scrollToAnchor() {
+    const el = this.resolveAnchorElement();
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  updatePosition() {
+    if (!this.marker) return;
+
+    const targetElement = this.resolveAnchorElement();
+
     let x: number, y: number;
 
     if (targetElement) {
@@ -91,6 +113,14 @@ export class MarkerBubble {
     this.element.style.position = 'fixed';
     this.element.style.left = `${x}px`;
     this.element.style.top = `${y}px`;
+  }
+
+  /** Hide/show the bubble based on whether the anchor element is visible */
+  updateVisibility(): boolean {
+    const v = this.getAnchorVisibility();
+    const visible = v ? v.visible : false;
+    this.element.style.display = visible ? '' : 'none';
+    return visible;
   }
 
   getMarkerId(): string | null {

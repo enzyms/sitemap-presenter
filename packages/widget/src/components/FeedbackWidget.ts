@@ -56,6 +56,9 @@ export class FeedbackWidget extends HTMLElement {
   // Track marker bubble instances for scroll updates
   private markerBubbles: MarkerBubble[] = [];
 
+  // Debounce timer for visibility reporting
+  private visibilityDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor() {
     super();
     this.shadow = this.attachShadow({ mode: 'open' });
@@ -230,6 +233,9 @@ export class FeedbackWidget extends HTMLElement {
       this.markers = await this.api.getMarkers(pagePath);
       this.renderMarkers();
       this.updateButtonCount();
+
+      // Hide bubbles whose anchors are not visible at current viewport
+      setTimeout(() => this.updateMarkerVisibility(), 300);
 
       // Notify parent if in iframe
       if (this.isInIframe) {
@@ -763,6 +769,23 @@ export class FeedbackWidget extends HTMLElement {
   private handleResize() {
     // Update marker positions
     this.handleScroll();
+    // Update bubble visibility after debounce
+    this.debouncedUpdateVisibility();
+  }
+
+  private debouncedUpdateVisibility() {
+    if (this.visibilityDebounceTimer) {
+      clearTimeout(this.visibilityDebounceTimer);
+    }
+    this.visibilityDebounceTimer = setTimeout(() => {
+      this.updateMarkerVisibility();
+    }, 200);
+  }
+
+  private updateMarkerVisibility() {
+    for (const bubble of this.markerBubbles) {
+      bubble.updateVisibility();
+    }
   }
 
   // ============================================================
@@ -770,6 +793,11 @@ export class FeedbackWidget extends HTMLElement {
   // ============================================================
 
   private cleanup() {
+    if (this.visibilityDebounceTimer) {
+      clearTimeout(this.visibilityDebounceTimer);
+      this.visibilityDebounceTimer = null;
+    }
+
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;
@@ -997,16 +1025,24 @@ export class FeedbackWidget extends HTMLElement {
   }
 
   private handleHighlightMarkerRequest(markerId: string | null) {
-    // Remove highlight from all markers
+    // Set highlight on the matching bubble, remove from all others
     for (const bubble of this.markerBubbles) {
-      bubble.setHighlighted(false);
+      bubble.setHighlighted(bubble.getMarkerId() === markerId);
     }
 
-    // Highlight the specified marker
     if (markerId) {
       const markerWithComments = this.markers.find(m => m.id === markerId);
       if (markerWithComments) {
-        this.openCommentsPanel(markerWithComments);
+        const bubble = this.markerBubbles.find(b => b.getMarkerId() === markerId);
+        // Delay to let layout settle after potential viewport resize
+        setTimeout(() => {
+          bubble?.scrollToAnchor();
+          // Open panel after scroll animation settles so it positions correctly
+          setTimeout(() => {
+            this.handleScroll(); // refresh bubble positions
+            this.openCommentsPanel(markerWithComments);
+          }, 400);
+        }, 150);
       }
     } else {
       this.closeCommentsPanel();
