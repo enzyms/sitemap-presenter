@@ -250,9 +250,6 @@ export class FeedbackWidget extends HTMLElement {
       this.renderMarkers();
       this.updateButtonCount();
 
-      // Hide bubbles whose anchors are not visible at current viewport
-      setTimeout(() => this.updateMarkerVisibility(), 300);
-
       // Notify parent if in iframe
       if (this.isInIframe) {
         this.notifyParentOfNavigation();
@@ -280,6 +277,9 @@ export class FeedbackWidget extends HTMLElement {
       this.markersContainer.appendChild(bubble.element);
       this.markerBubbles.push(bubble);
     }
+
+    // Always apply status filter + anchor visibility after rendering
+    this.updateMarkerVisibility();
   }
 
   private updateButtonCount() {
@@ -864,26 +864,17 @@ export class FeedbackWidget extends HTMLElement {
     });
   }
 
-  private closeCommentsPanel() {
-    // Remove outside-click listener
+  /** Tear down panel UI only (no side effects like uncommitted-marker deletion). */
+  private closePanelUI() {
     if (this.outsideClickHandler) {
       document.removeEventListener('mousedown', this.outsideClickHandler, true);
       this.outsideClickHandler = null;
     }
 
     if (this.commentsPanel) {
-      // If the marker has no comments, delete it (uncommitted marker)
-      const markerId = this.commentsPanel.getMarkerId();
-      if (markerId && !this.commentsPanel.hasComments()) {
-        this.deleteUncommentedMarker(markerId);
-      }
-
-      // Remove highlight from marker
       if (this.activeMarkerId) {
         const bubble = this.markerBubbles.find(b => b.getMarkerId() === this.activeMarkerId);
-        if (bubble) {
-          bubble.setHighlighted(false);
-        }
+        if (bubble) bubble.setHighlighted(false);
       }
 
       this.commentsPanel.destroy();
@@ -892,18 +883,43 @@ export class FeedbackWidget extends HTMLElement {
     }
   }
 
+  /** Close panel + delete marker if it has no comments (user dismissed without commenting). */
+  private closeCommentsPanel() {
+    if (this.commentsPanel) {
+      const markerId = this.commentsPanel.getMarkerId();
+      if (markerId && !this.commentsPanel.hasComments()) {
+        this.deleteUncommentedMarker(markerId);
+      }
+    }
+    this.closePanelUI();
+  }
+
   private async deleteUncommentedMarker(markerId: string) {
     if (!this.api) return;
     // Check the marker still exists (may have been deleted by explicit onDelete)
     if (!this.markers.find(m => m.id === markerId)) return;
-    try {
-      await this.api.deleteMarker(markerId);
-      this.markers = this.markers.filter(m => m.id !== markerId);
-      this.renderMarkers();
-      this.updateButtonCount();
 
+    // Resolve temp ID if marker creation is still in flight
+    let realId = markerId;
+    const pending = this.pendingMarkerIds.get(markerId);
+    if (pending) realId = await pending.promise;
+
+    // Remove locally — no full re-render to avoid flashes during transitions
+    this.markers = this.markers.filter(m => m.id !== markerId && m.id !== realId);
+    const bubbleIdx = this.markerBubbles.findIndex(
+      b => b.getMarkerId() === markerId || b.getMarkerId() === realId
+    );
+    if (bubbleIdx >= 0) {
+      this.markerBubbles[bubbleIdx].destroy();
+      this.markerBubbles.splice(bubbleIdx, 1);
+    }
+    this.updateButtonCount();
+
+    // Delete from DB in background
+    try {
+      await this.api.deleteMarker(realId);
       if (this.isInIframe) {
-        this.sendToParent({ type: 'FEEDBACK_MARKER_DELETED', markerId });
+        this.sendToParent({ type: 'FEEDBACK_MARKER_DELETED', markerId: realId });
       }
     } catch (error) {
       console.error('[FeedbackWidget] Failed to delete uncommitted marker:', error);
@@ -917,30 +933,20 @@ export class FeedbackWidget extends HTMLElement {
   private async transitionPanel() {
     if (!this.commentsPanel) return;
 
-    // Remove outside-click handler immediately so it doesn't interfere
+    // Disable outside-click immediately so it doesn't interfere
     if (this.outsideClickHandler) {
       document.removeEventListener('mousedown', this.outsideClickHandler, true);
       this.outsideClickHandler = null;
     }
 
-    // Delete uncommitted marker if needed
+    // Delete uncommitted marker if needed (fire-and-forget, no re-render)
     const markerId = this.commentsPanel.getMarkerId();
     if (markerId && !this.commentsPanel.hasComments()) {
       this.deleteUncommentedMarker(markerId);
     }
 
-    // Fade out and destroy
     await this.commentsPanel.fadeOut();
-
-    // Un-highlight the old marker
-    if (this.activeMarkerId) {
-      const bubble = this.markerBubbles.find(b => b.getMarkerId() === this.activeMarkerId);
-      if (bubble) bubble.setHighlighted(false);
-    }
-
-    this.commentsPanel.destroy();
-    this.commentsPanel = null;
-    this.activeMarkerId = null;
+    this.closePanelUI();
   }
 
   /**
@@ -953,19 +959,10 @@ export class FeedbackWidget extends HTMLElement {
     const bubbleFade = bubble?.fadeOut() ?? Promise.resolve();
 
     await Promise.all([panelFade, bubbleFade]);
+    this.closePanelUI();
 
-    // Clean up panel without triggering delete-uncommitted (marker was explicitly archived)
-    if (this.outsideClickHandler) {
-      document.removeEventListener('mousedown', this.outsideClickHandler, true);
-      this.outsideClickHandler = null;
-    }
-    this.commentsPanel?.destroy();
-    this.commentsPanel = null;
-    this.activeMarkerId = null;
-
-    // Re-render markers then apply status filter to hide the archived bubble
+    // Re-render markers (visibility filter is applied inside renderMarkers)
     this.renderMarkers();
-    this.updateMarkerVisibility();
   }
 
   // ============================================================
@@ -973,7 +970,7 @@ export class FeedbackWidget extends HTMLElement {
   // ============================================================
 
   private enterRepositionMode(markerId: string) {
-    this.closeCommentsPanel();
+    this.closePanelUI();
     this.isRepositioning = true;
     this.repositioningMarkerId = markerId;
     this.hoveredElement = null;

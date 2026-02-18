@@ -327,10 +327,15 @@ export class CommentsPanel {
 
   fadeOut(): Promise<void> {
     return new Promise(resolve => {
+      let resolved = false;
+      const done = () => {
+        if (resolved) return;
+        resolved = true;
+        resolve();
+      };
       this.element.classList.add('fade-out');
-      const done = () => { resolve(); };
       this.element.addEventListener('animationend', done, { once: true });
-      // Safety fallback
+      // Safety fallback if animation doesn't fire
       setTimeout(done, 250);
     });
   }
