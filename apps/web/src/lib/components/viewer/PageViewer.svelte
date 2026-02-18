@@ -277,7 +277,7 @@
 		messenger.addComment(markerId, content);
 	}
 
-	function handleFilterChange(status: 'all' | MarkerStatus) {
+	function handleFilterChange(status: 'all' | 'active' | MarkerStatus) {
 		messenger.filterByStatus(status);
 	}
 

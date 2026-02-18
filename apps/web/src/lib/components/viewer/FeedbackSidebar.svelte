@@ -12,7 +12,7 @@
 		onStatusChange: (markerId: string, status: MarkerStatus) => void;
 		onDelete: (markerId: string) => void;
 		onComment: (markerId: string, content: string) => void;
-		onFilterChange: (status: 'all' | MarkerStatus) => void;
+		onFilterChange: (status: 'all' | 'active' | MarkerStatus) => void;
 	}
 
 	let {
@@ -26,7 +26,8 @@
 		onFilterChange
 	}: Props = $props();
 
-	let statusFilter = $state<'all' | 'open' | 'resolved' | 'archived'>('all');
+	let activeTab = $state<'feedbacks' | 'archives'>('feedbacks');
+	let statusFilter = $state<'all' | 'open' | 'resolved'>('all');
 	let expandedMarkerId = $state<string | null>(null);
 	let openMenuId = $state<string | null>(null);
 
@@ -34,13 +35,38 @@
 	let showYoutrackModal = $state<FeedbackMarker | null>(null);
 	let showAutofixModal = $state<FeedbackMarker | null>(null);
 
+	// Active (non-archived) markers
+	let activeMarkers = $derived(markers.filter((m) => m.status !== 'archived'));
+	let archivedMarkers = $derived(markers.filter((m) => m.status === 'archived'));
+
+	let tabMarkers = $derived(activeTab === 'feedbacks' ? activeMarkers : archivedMarkers);
+
 	let filteredMarkers = $derived(
-		statusFilter === 'all' ? markers : markers.filter((m) => m.status === statusFilter)
+		activeTab === 'archives' || statusFilter === 'all'
+			? tabMarkers
+			: tabMarkers.filter((m) => m.status === statusFilter)
 	);
 
-	let openCount = $derived(markers.filter((m) => m.status === 'open').length);
-	let resolvedCount = $derived(markers.filter((m) => m.status === 'resolved').length);
-	let archivedCount = $derived(markers.filter((m) => m.status === 'archived').length);
+	let openCount = $derived(activeMarkers.filter((m) => m.status === 'open').length);
+	let resolvedCount = $derived(activeMarkers.filter((m) => m.status === 'resolved').length);
+
+	function switchTab(tab: 'feedbacks' | 'archives') {
+		activeTab = tab;
+		statusFilter = 'all';
+		if (tab === 'feedbacks') {
+			onFilterChange('active');
+		} else {
+			onFilterChange('archived');
+		}
+	}
+
+	function handleDropdownChange() {
+		if (statusFilter === 'all') {
+			onFilterChange('active');
+		} else {
+			onFilterChange(statusFilter);
+		}
+	}
 
 	function toggleMenu(event: MouseEvent, markerId: string): void {
 		event.stopPropagation();
@@ -110,10 +136,18 @@
 <svelte:window onclick={handleWindowClick} />
 
 <div class="w-80 border-l bg-white flex flex-col h-full overflow-hidden">
-	<!-- Header -->
-	<div class="p-4 border-b">
-		<h3 class="font-semibold text-gray-800 flex items-center gap-2">
-			<svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+	<!-- Tabs -->
+	<div class="flex border-b">
+		<button
+			onclick={() => switchTab('feedbacks')}
+			class="flex-1 px-4 py-3 text-sm font-semibold flex items-center justify-center gap-2 transition-colors border-b-2"
+			class:border-orange-500={activeTab === 'feedbacks'}
+			class:text-orange-600={activeTab === 'feedbacks'}
+			class:border-transparent={activeTab !== 'feedbacks'}
+			class:text-gray-500={activeTab !== 'feedbacks'}
+			class:hover:text-gray-700={activeTab !== 'feedbacks'}
+		>
+			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path
 					stroke-linecap="round"
 					stroke-linejoin="round"
@@ -122,21 +156,49 @@
 				/>
 			</svg>
 			Feedbacks
-		</h3>
+			{#if activeMarkers.length > 0}
+				<span class="px-1.5 py-0.5 text-xs rounded-full bg-orange-100 text-orange-700">
+					{activeMarkers.length}
+				</span>
+			{/if}
+		</button>
+		<button
+			onclick={() => switchTab('archives')}
+			class="flex-1 px-4 py-3 text-sm font-semibold flex items-center justify-center gap-2 transition-colors border-b-2"
+			class:border-gray-500={activeTab === 'archives'}
+			class:text-gray-700={activeTab === 'archives'}
+			class:border-transparent={activeTab !== 'archives'}
+			class:text-gray-400={activeTab !== 'archives'}
+			class:hover:text-gray-600={activeTab !== 'archives'}
+		>
+			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M5 8h14M5 8a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v1a2 2 0 01-2 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+				/>
+			</svg>
+			Archives
+			{#if archivedMarkers.length > 0}
+				<span class="px-1.5 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
+					{archivedMarkers.length}
+				</span>
+			{/if}
+		</button>
 	</div>
 
-	<!-- Filter -->
-	{#if markers.length > 0}
+	<!-- Filter (feedbacks tab only) -->
+	{#if activeTab === 'feedbacks' && activeMarkers.length > 0}
 		<div class="px-4 py-2 border-b">
 			<select
 				bind:value={statusFilter}
-				onchange={() => onFilterChange(statusFilter)}
+				onchange={handleDropdownChange}
 				class="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
 			>
-				<option value="all">All markers ({markers.length})</option>
-				<option value="open">Open only ({openCount})</option>
-				<option value="resolved">Resolved only ({resolvedCount})</option>
-				<option value="archived">Archived only ({archivedCount})</option>
+				<option value="all">All ({activeMarkers.length})</option>
+				<option value="open">Open ({openCount})</option>
+				<option value="resolved">Resolved ({resolvedCount})</option>
 			</select>
 		</div>
 	{/if}
@@ -161,8 +223,10 @@
 					</svg>
 					<p>No markers on this page</p>
 					<p class="text-xs mt-1">Use the feedback tool in the app to add markers</p>
+				{:else if activeTab === 'archives'}
+					<p>No archived markers</p>
 				{:else}
-					<p>No {statusFilter} markers</p>
+					<p>No {statusFilter === 'all' ? '' : statusFilter} markers</p>
 				{/if}
 			</div>
 		{:else}

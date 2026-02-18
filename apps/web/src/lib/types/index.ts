@@ -198,10 +198,10 @@ export interface HighlightMarkerMessage {
 	markerId: string | null;
 }
 
-/** Filter visible markers by status */
+/** Filter visible markers by status. 'active' = open + resolved (excludes archived) */
 export interface StatusFilterMessage {
 	type: 'FEEDBACK_STATUS_FILTER';
-	status: 'all' | MarkerStatus;
+	status: 'all' | 'active' | MarkerStatus;
 }
 
 export type SitemapToIframeMessage =

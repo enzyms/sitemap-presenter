@@ -127,6 +127,15 @@ export class MarkerBubble {
     return this.marker?.id || null;
   }
 
+  fadeOut(): Promise<void> {
+    return new Promise(resolve => {
+      this.element.classList.add('fade-out');
+      const done = () => { resolve(); };
+      this.element.addEventListener('animationend', done, { once: true });
+      setTimeout(done, 350);
+    });
+  }
+
   destroy() {
     this.element.remove();
   }

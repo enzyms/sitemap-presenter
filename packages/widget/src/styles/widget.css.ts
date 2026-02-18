@@ -161,6 +161,21 @@ export const widgetStyles = `
   }
 
   /* Comments panel wrapper */
+  @keyframes panelFadeIn {
+    from { opacity: 0; transform: translateY(6px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes panelFadeOut {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(6px) scale(0.97); }
+  }
+
+  @keyframes bubbleFadeOut {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.5); }
+  }
+
   .comments-panel-wrapper {
     position: fixed;
     z-index: 999999;
@@ -174,6 +189,17 @@ export const widgetStyles = `
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    animation: panelFadeIn 0.2s ease both;
+  }
+
+  .comments-panel-wrapper.fade-out {
+    animation: panelFadeOut 0.2s ease both;
+    pointer-events: none;
+  }
+
+  .marker-bubble-wrapper.fade-out {
+    animation: bubbleFadeOut 0.3s ease both;
+    pointer-events: none;
   }
 
   /* Comments panel - inner container */
@@ -381,6 +407,11 @@ export const widgetStyles = `
 
   .primary-action-btn.reopen:hover {
     background: var(--primary-hover);
+  }
+
+  .primary-action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   /* Kebab (falafel) menu */

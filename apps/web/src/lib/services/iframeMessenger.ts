@@ -50,7 +50,7 @@ export class IframeMessenger {
 		this.send({ type: 'FEEDBACK_HIGHLIGHT_MARKER', markerId });
 	}
 
-	filterByStatus(status: 'all' | MarkerStatus): void {
+	filterByStatus(status: 'all' | 'active' | MarkerStatus): void {
 		this.send({ type: 'FEEDBACK_STATUS_FILTER', status });
 	}
 

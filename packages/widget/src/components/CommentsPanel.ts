@@ -31,6 +31,15 @@ export class CommentsPanel {
     if (this.marker) {
       this.marker = { ...this.marker, comments };
       this.renderComments();
+
+      // Enable resolve button once first comment is added
+      if (comments.length > 0 && this.marker.status === 'open') {
+        const resolveBtn = this.element.querySelector('[data-action="resolve"]') as HTMLButtonElement;
+        if (resolveBtn) {
+          resolveBtn.disabled = false;
+          resolveBtn.removeAttribute('title');
+        }
+      }
     }
   }
 
@@ -84,9 +93,11 @@ export class CommentsPanel {
 
     // Primary action button based on status
     let primaryBtn = '';
+    const hasComments = this.marker.comments.length > 0;
+
     if (status === 'open') {
       primaryBtn = `
-        <button class="primary-action-btn resolve" data-action="resolve">
+        <button class="primary-action-btn resolve" data-action="resolve" ${!hasComments ? 'disabled title="Add a comment first"' : ''}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
             <path d="M5 13l4 4L19 7"/>
           </svg>
@@ -301,6 +312,27 @@ export class CommentsPanel {
 
   getMarkerId(): string | null {
     return this.marker?.id || null;
+  }
+
+  hasComments(): boolean {
+    return (this.marker?.comments.length ?? 0) > 0;
+  }
+
+  focusInput() {
+    const textarea = this.element.querySelector('[data-comment-input]') as HTMLTextAreaElement;
+    if (textarea) {
+      textarea.focus();
+    }
+  }
+
+  fadeOut(): Promise<void> {
+    return new Promise(resolve => {
+      this.element.classList.add('fade-out');
+      const done = () => { resolve(); };
+      this.element.addEventListener('animationend', done, { once: true });
+      // Safety fallback
+      setTimeout(done, 250);
+    });
   }
 
   destroy() {
