@@ -23,6 +23,11 @@ export class CommentsPanel {
     this.render();
   }
 
+  /** Update the marker reference without re-rendering (e.g. when swapping temp → real ID). */
+  updateMarkerRef(marker: MarkerWithComments) {
+    this.marker = marker;
+  }
+
   setEvents(events: CommentsPanelEvents) {
     this.events = events;
   }

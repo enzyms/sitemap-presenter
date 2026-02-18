@@ -636,7 +636,8 @@ export class FeedbackWidget extends HTMLElement {
       // Update panel and bubble references to use real ID
       if (this.activeMarkerId === tempId) {
         this.activeMarkerId = marker.id;
-        this.commentsPanel?.setMarker({ ...marker, comments: currentComments });
+        // Use updateMarkerRef to avoid re-rendering (preserves textarea content + focus)
+        this.commentsPanel?.updateMarkerRef({ ...marker, comments: currentComments });
       }
 
       // Re-render bubbles with real IDs
