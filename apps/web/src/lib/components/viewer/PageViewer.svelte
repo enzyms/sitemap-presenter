@@ -39,6 +39,13 @@
 	let iframeSrc = $state<string | null>(null);
 
 	let feedbackMarkers = $derived(feedbackStore.markersForCurrentPage.map(convertSupabaseMarkerToFeedback));
+	let activeTabFilter = $state<'active' | 'archived'>('active');
+
+	let tabMarkers = $derived(
+		activeTabFilter === 'active'
+			? feedbackMarkers.filter((m) => m.status !== 'archived')
+			: feedbackMarkers.filter((m) => m.status === 'archived')
+	);
 
 	// Static breakpoint ranges for Phase 1
 	const BREAKPOINTS = [
@@ -50,7 +57,7 @@
 	let markerCountsByRange = $derived(
 		BREAKPOINTS.map((bp) => ({
 			...bp,
-			count: feedbackMarkers.filter(
+			count: tabMarkers.filter(
 				(m) => m.viewport.width >= bp.min && m.viewport.width < bp.max
 			).length
 		}))
@@ -279,6 +286,12 @@
 
 	function handleFilterChange(status: 'all' | 'active' | MarkerStatus) {
 		messenger.filterByStatus(status);
+		// Track which tab is active for viewport counts
+		if (status === 'active' || status === 'open' || status === 'resolved') {
+			activeTabFilter = 'active';
+		} else if (status === 'archived') {
+			activeTabFilter = 'archived';
+		}
 	}
 
 	// Manage iframe loading state

@@ -63,7 +63,10 @@ export class FeedbackWidget extends HTMLElement {
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
 
   // Status filter from parent sidebar
-  private statusFilter: string = 'all';
+  private statusFilter: string = 'active';
+
+  // Maps temp marker IDs to a promise that resolves with the real DB ID
+  private pendingMarkerIds = new Map<string, { promise: Promise<string>; resolve: (id: string) => void }>();
 
   // Reposition mode state (triggered from panel's "Move marker" button)
   private isRepositioning = false;
@@ -577,6 +580,41 @@ export class FeedbackWidget extends HTMLElement {
       timestamp: new Date().toISOString()
     };
 
+    const now = new Date().toISOString();
+    const tempId = `temp-${Date.now()}`;
+    const nextNumber = this.markers.length > 0
+      ? Math.max(...this.markers.map(m => m.number)) + 1
+      : 1;
+
+    // Optimistic marker — show immediately
+    const optimistic: MarkerWithComments = {
+      id: tempId,
+      site_id: '',
+      author_id: null,
+      page_url: window.location.href,
+      page_path: window.location.pathname,
+      page_title: document.title,
+      number: nextNumber,
+      anchor,
+      fallback_position,
+      viewport,
+      status: 'open' as MarkerStatus,
+      created_at: now,
+      updated_at: now,
+      comments: []
+    };
+
+    // Register a pending ID resolver so comments can await the real ID
+    let resolveRealId!: (id: string) => void;
+    const realIdPromise = new Promise<string>(r => { resolveRealId = r; });
+    this.pendingMarkerIds.set(tempId, { promise: realIdPromise, resolve: resolveRealId });
+
+    this.markers = [...this.markers, optimistic];
+    this.renderMarkers();
+    this.updateButtonCount();
+    this.openCommentsPanel(optimistic);
+
+    // Persist in background, then swap temp → real
     try {
       const marker = await this.api.createMarker({
         page_url: window.location.href,
@@ -587,20 +625,36 @@ export class FeedbackWidget extends HTMLElement {
         viewport
       });
 
-      // Add to local state
-      this.markers = [...this.markers, marker];
+      // Resolve the pending ID so queued comments can proceed
+      resolveRealId(marker.id);
+      this.pendingMarkerIds.delete(tempId);
+
+      // Replace optimistic marker with the real one (preserve any comments added meanwhile)
+      const currentComments = this.markers.find(m => m.id === tempId)?.comments ?? [];
+      this.markers = this.markers.map(m => m.id === tempId ? { ...marker, comments: currentComments } : m);
+
+      // Update panel and bubble references to use real ID
+      if (this.activeMarkerId === tempId) {
+        this.activeMarkerId = marker.id;
+        this.commentsPanel?.setMarker({ ...marker, comments: currentComments });
+      }
+
+      // Re-render bubbles with real IDs
       this.renderMarkers();
-      this.updateButtonCount();
 
       // Notify parent if in iframe
       if (this.isInIframe) {
         this.notifyParentOfMarkerCreated(marker);
       }
-
-      // Open comments panel for the new marker
-      this.openCommentsPanel(marker);
     } catch (error) {
       console.error('[FeedbackWidget] Failed to create marker:', error);
+      resolveRealId(tempId); // unblock any waiting comment
+      this.pendingMarkerIds.delete(tempId);
+      // Remove optimistic marker on failure
+      this.markers = this.markers.filter(m => m.id !== tempId);
+      this.renderMarkers();
+      this.updateButtonCount();
+      this.closeCommentsPanel();
     }
   }
 
@@ -701,16 +755,21 @@ export class FeedbackWidget extends HTMLElement {
       onAddComment: async (markerId, content) => {
         if (!this.api) return;
         try {
-          const comment = await this.api.createComment({ marker_id: markerId, content });
-          // Add comment locally
+          // Resolve temp ID to real DB ID if marker creation is still in flight
+          let realId = markerId;
+          const pending = this.pendingMarkerIds.get(markerId);
+          if (pending) realId = await pending.promise;
+
+          const comment = await this.api.createComment({ marker_id: realId, content });
+          // Add comment locally (use realId — markers array already swapped)
           this.markers = this.markers.map(m => {
-            if (m.id === markerId) {
+            if (m.id === realId) {
               return { ...m, comments: [...m.comments, comment] };
             }
             return m;
           });
           // Update panel
-          const updatedMarker = this.markers.find(m => m.id === markerId);
+          const updatedMarker = this.markers.find(m => m.id === realId);
           if (updatedMarker) {
             this.commentsPanel?.updateComments(updatedMarker.comments);
           }
@@ -721,10 +780,15 @@ export class FeedbackWidget extends HTMLElement {
       onStatusChange: async (markerId, status) => {
         if (!this.api) return;
         try {
-          await this.api.updateMarker(markerId, { status });
-          // Update locally
+          // Resolve temp ID if needed
+          let realId = markerId;
+          const pending = this.pendingMarkerIds.get(markerId);
+          if (pending) realId = await pending.promise;
+
+          await this.api.updateMarker(realId, { status });
+          // Update locally (use realId — markers array may have swapped from temp)
           this.markers = this.markers.map(m => {
-            if (m.id === markerId) {
+            if (m.id === realId) {
               return { ...m, status };
             }
             return m;
@@ -733,7 +797,7 @@ export class FeedbackWidget extends HTMLElement {
 
           if (status === 'archived') {
             // Fade out panel + bubble, then clean up
-            await this.fadeOutAndClose(markerId);
+            await this.fadeOutAndClose(realId);
           } else {
             this.renderMarkers();
             this.commentsPanel?.updateStatus(status);
@@ -745,8 +809,12 @@ export class FeedbackWidget extends HTMLElement {
       onDelete: async (markerId) => {
         if (!this.api) return;
         try {
-          await this.api.deleteMarker(markerId);
-          this.markers = this.markers.filter(m => m.id !== markerId);
+          let realId = markerId;
+          const pending = this.pendingMarkerIds.get(markerId);
+          if (pending) realId = await pending.promise;
+
+          await this.api.deleteMarker(realId);
+          this.markers = this.markers.filter(m => m.id !== realId);
           this.renderMarkers();
           this.updateButtonCount();
           this.closeCommentsPanel();
@@ -895,8 +963,9 @@ export class FeedbackWidget extends HTMLElement {
     this.commentsPanel = null;
     this.activeMarkerId = null;
 
-    // Re-render markers (the archived bubble will be hidden by visibility filter)
+    // Re-render markers then apply status filter to hide the archived bubble
     this.renderMarkers();
+    this.updateMarkerVisibility();
   }
 
   // ============================================================
