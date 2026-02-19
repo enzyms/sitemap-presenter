@@ -55,38 +55,60 @@ export class CommentsPanel {
     }
   }
 
-  positionNear(x: number, y: number) {
-    const panelWidth = 260;
-    const panelHeight = 300;
-    const padding = 16;
+  positionNear(bubbleRect: DOMRect) {
+    const gap = 12;
+    const padding = 12;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
 
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
+    // Measure actual rendered panel size
+    const pr = this.element.getBoundingClientRect();
+    const pw = pr.width || 312;
+    const ph = pr.height || 300;
 
-    // Position to the right of the marker by default
-    let left = x + 20;
-    let top = y - 20;
+    const clampTop = (t: number) => Math.max(padding, Math.min(t, vh - ph - padding));
+    const preferredTop = clampTop(bubbleRect.top - 20);
 
-    // If it would go off the right edge, position to the left
-    if (left + panelWidth > viewportWidth - padding) {
-      left = x - panelWidth - 20;
+    // Try RIGHT of bubble
+    const rightLeft = bubbleRect.right + gap;
+    if (rightLeft + pw <= vw - padding) {
+      this.setPosition(rightLeft, preferredTop);
+      return;
     }
 
-    // If it would go off the left edge, position at left edge
-    if (left < padding) {
-      left = padding;
+    // Try LEFT of bubble
+    const leftLeft = bubbleRect.left - pw - gap;
+    if (leftLeft >= padding) {
+      this.setPosition(leftLeft, preferredTop);
+      return;
     }
 
-    // If it would go off the bottom, adjust up
-    if (top + panelHeight > viewportHeight - padding) {
-      top = viewportHeight - panelHeight - padding;
+    // Try BELOW bubble (centered)
+    const centeredLeft = Math.max(padding, Math.min(
+      bubbleRect.left + bubbleRect.width / 2 - pw / 2,
+      vw - pw - padding
+    ));
+    const belowTop = bubbleRect.bottom + gap;
+    if (belowTop + ph <= vh - padding) {
+      this.setPosition(centeredLeft, belowTop);
+      return;
     }
 
-    // If it would go off the top, adjust down
-    if (top < padding) {
-      top = padding;
+    // Try ABOVE bubble (centered)
+    const aboveTop = bubbleRect.top - ph - gap;
+    if (aboveTop >= padding) {
+      this.setPosition(centeredLeft, aboveTop);
+      return;
     }
 
+    // Fallback: clamp to viewport (may overlap bubble on very tight viewports)
+    this.setPosition(
+      Math.max(padding, Math.min(rightLeft, vw - pw - padding)),
+      preferredTop
+    );
+  }
+
+  private setPosition(left: number, top: number) {
     this.element.style.left = `${left}px`;
     this.element.style.top = `${top}px`;
   }
@@ -289,6 +311,41 @@ export class CommentsPanel {
           textarea.value = '';
           submitBtn.disabled = true;
         }
+      });
+    }
+
+    // Draggable header
+    const header = this.element.querySelector('.comments-panel-header') as HTMLElement;
+    if (header) {
+      header.addEventListener('mousedown', (e: MouseEvent) => {
+        // Don't drag when clicking the close button
+        if ((e.target as Element).closest('[data-action="close"]')) return;
+
+        e.preventDefault();
+        header.style.cursor = 'grabbing';
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startLeft = parseInt(this.element.style.left) || 0;
+        const startTop = parseInt(this.element.style.top) || 0;
+
+        const onMove = (me: MouseEvent) => {
+          const pw = this.element.offsetWidth;
+          const ph = this.element.offsetHeight;
+          const newLeft = Math.max(0, Math.min(startLeft + me.clientX - startX, window.innerWidth - pw));
+          const newTop = Math.max(0, Math.min(startTop + me.clientY - startY, window.innerHeight - ph));
+          this.element.style.left = `${newLeft}px`;
+          this.element.style.top = `${newTop}px`;
+        };
+
+        const onUp = () => {
+          header.style.cursor = '';
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
       });
     }
   }

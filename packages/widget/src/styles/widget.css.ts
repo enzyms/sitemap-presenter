@@ -205,6 +205,7 @@ export const widgetStyles = `
   /* Comments panel - inner container */
   .comments-panel {
     width: 300px;
+    max-width: calc(100vw - 24px);
     max-height: 450px;
     background: #f8f9fa;
     display: flex;
@@ -218,6 +219,8 @@ export const widgetStyles = `
     justify-content: space-between;
     padding: 10px;
     background: #f8f9fa;
+    cursor: grab;
+    user-select: none;
   }
 
   .comments-panel-header .marker-number {
@@ -311,6 +314,7 @@ export const widgetStyles = `
     flex: 1;
     display: flex;
     flex-direction: column;
+    border-top: 1px solid #e4e6ea;
   }
 
   .comment-input {

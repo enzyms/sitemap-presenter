@@ -837,7 +837,7 @@ export class FeedbackWidget extends HTMLElement {
     const bubbleEl = this.markersContainer?.querySelector(`[data-marker-id="${marker.id}"]`);
     if (bubbleEl) {
       const rect = bubbleEl.getBoundingClientRect();
-      this.commentsPanel.positionNear(rect.left + rect.width / 2, rect.top);
+      this.commentsPanel.positionNear(rect);
 
       // Highlight the marker
       const bubble = this.markerBubbles.find(b => b.getMarkerId() === marker.id);
