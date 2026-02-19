@@ -348,7 +348,7 @@
 					value={sitemapStore.layoutMode}
 					onchange={(e) => sitemapStore.setLayoutMode(e.currentTarget.value as 'hierarchical' | 'radial')}
 				>
-					<option value="hierarchical">Rows</option>
+					<option value="hierarchical">Tree</option>
 					<option value="radial">Circular</option>
 				</select>
 

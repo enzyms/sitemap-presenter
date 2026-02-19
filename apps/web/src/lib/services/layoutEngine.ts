@@ -1,4 +1,3 @@
-import dagre from 'dagre';
 import { Position, type Node, type Edge } from '@xyflow/svelte';
 import type { PageNode } from '$lib/types';
 
@@ -249,44 +248,113 @@ export function reorganizeByUrlHierarchy(
 // LAYOUT ALGORITHMS
 // ============================================================
 
-// Hierarchical layout using Dagre (rows by depth)
+// Tree-view layout: L1 nodes as column heads, subtrees stacked vertically below
+const COLUMN_GAP = 80;
+const VERTICAL_GAP = 40;
+const ROOT_TO_L1_GAP = 100;
+const INDENT_STEP = NODE_WIDTH + 40;
+
 function layoutHierarchical(nodes: PageNode[], edges: Edge[]): PageNode[] {
 	const visibleNodes = nodes.filter((n) => !n.hidden);
 	if (visibleNodes.length === 0) return nodes;
 
-	const dagreGraph = new dagre.graphlib.Graph();
-	dagreGraph.setDefaultEdgeLabel(() => ({}));
-	dagreGraph.setGraph({
-		rankdir: 'TB', // Top to Bottom (rows by depth)
-		ranksep: 150, // Vertical spacing between levels
-		nodesep: 80, // Horizontal spacing between nodes
-		align: 'UL'
-	});
+	const visibleIds = new Set(visibleNodes.map((n) => n.id));
 
-	visibleNodes.forEach((node) => {
-		dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-	});
+	// Build parent → children map from visible edges
+	const childrenMap = new Map<string, string[]>();
+	const hasParent = new Set<string>();
+	for (const edge of edges) {
+		if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) continue;
+		const children = childrenMap.get(edge.source) || [];
+		children.push(edge.target);
+		childrenMap.set(edge.source, children);
+		hasParent.add(edge.target);
+	}
 
-	edges.forEach((edge) => {
-		const sourceVisible = visibleNodes.some((n) => n.id === edge.source);
-		const targetVisible = visibleNodes.some((n) => n.id === edge.target);
-		if (sourceVisible && targetVisible) {
-			dagreGraph.setEdge(edge.source, edge.target);
+	// Find root (depth 0)
+	const rootNode = visibleNodes.find((n) => n.data.depth === 0);
+	if (!rootNode) return nodes;
+
+	const l1Children = (childrenMap.get(rootNode.id) || []).filter((id) => visibleIds.has(id));
+
+	const positions = new Map<string, { x: number; y: number }>();
+
+	// Measure a subtree: returns { height, maxWidth } for the column
+	function measureSubtree(nodeId: string, relativeDepth: number): { height: number; maxWidth: number } {
+		const indent = relativeDepth >= 3 ? (relativeDepth - 2) * INDENT_STEP : 0;
+		const nodeWidth = indent + NODE_WIDTH;
+		const children = (childrenMap.get(nodeId) || []).filter((id) => visibleIds.has(id));
+
+		if (children.length === 0) {
+			return { height: NODE_HEIGHT, maxWidth: nodeWidth };
 		}
-	});
 
-	dagre.layout(dagreGraph);
+		let totalHeight = NODE_HEIGHT;
+		let maxWidth = nodeWidth;
+		for (const childId of children) {
+			const childMeasure = measureSubtree(childId, relativeDepth + 1);
+			totalHeight += VERTICAL_GAP + childMeasure.height;
+			maxWidth = Math.max(maxWidth, childMeasure.maxWidth);
+		}
+		return { height: totalHeight, maxWidth };
+	}
+
+	// Place a subtree vertically starting at cursorY
+	function placeSubtree(nodeId: string, columnLeft: number, cursorY: number, relativeDepth: number): number {
+		const indent = relativeDepth >= 3 ? (relativeDepth - 2) * INDENT_STEP : 0;
+		positions.set(nodeId, { x: columnLeft + indent, y: cursorY });
+
+		let y = cursorY + NODE_HEIGHT + VERTICAL_GAP;
+		const children = (childrenMap.get(nodeId) || []).filter((id) => visibleIds.has(id));
+		for (const childId of children) {
+			y = placeSubtree(childId, columnLeft, y, relativeDepth + 1);
+		}
+		return y;
+	}
+
+	// Measure all L1 columns
+	const columnMeasures = l1Children.map((id) => ({
+		id,
+		...measureSubtree(id, 1)
+	}));
+
+	// Calculate total width and place L1 columns horizontally
+	const totalWidth = columnMeasures.reduce((sum, col) => sum + col.maxWidth, 0)
+		+ Math.max(0, columnMeasures.length - 1) * COLUMN_GAP;
+
+	const startX = -totalWidth / 2;
+	const l1Y = NODE_HEIGHT + ROOT_TO_L1_GAP;
+
+	let cursorX = startX;
+	for (const col of columnMeasures) {
+		placeSubtree(col.id, cursorX, l1Y, 1);
+		cursorX += col.maxWidth + COLUMN_GAP;
+	}
+
+	// Center root above all columns
+	positions.set(rootNode.id, { x: -NODE_WIDTH / 2, y: 0 });
+
+	// Place orphan nodes (visible, no parent edge, not root) in a row below all columns
+	const placed = new Set(positions.keys());
+	const orphans = visibleNodes.filter((n) => !placed.has(n.id));
+	if (orphans.length > 0) {
+		const maxY = Math.max(...Array.from(positions.values()).map((p) => p.y));
+		const orphanY = maxY + NODE_HEIGHT + VERTICAL_GAP * 2;
+		const orphanTotalWidth = orphans.length * NODE_WIDTH + (orphans.length - 1) * COLUMN_GAP;
+		let ox = -orphanTotalWidth / 2;
+		for (const node of orphans) {
+			positions.set(node.id, { x: ox, y: orphanY });
+			ox += NODE_WIDTH + COLUMN_GAP;
+		}
+	}
 
 	return nodes.map((node) => {
 		if (node.hidden) return node;
-		const pos = dagreGraph.node(node.id);
+		const pos = positions.get(node.id);
 		if (!pos) return node;
 		return {
 			...node,
-			position: {
-				x: pos.x - NODE_WIDTH / 2,
-				y: pos.y - NODE_HEIGHT / 2
-			}
+			position: { x: pos.x, y: pos.y }
 		};
 	});
 }
