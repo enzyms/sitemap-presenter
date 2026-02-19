@@ -15,6 +15,7 @@ export function getSupabase(): SupabaseClient {
 export type {
 	Site,
 	SiteSettings,
+	YouTrackConfig,
 	Marker,
 	MarkerWithComments,
 	Comment,

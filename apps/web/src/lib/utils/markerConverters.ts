@@ -21,6 +21,7 @@ export function convertSupabaseMarkerToFeedback(m: MarkerWithComments): Feedback
 			createdAt: c.created_at
 		})),
 		createdAt: m.created_at,
-		updatedAt: m.updated_at
+		updatedAt: m.updated_at,
+		youtrackIssueId: m.youtrack_issue_id ?? null
 	};
 }

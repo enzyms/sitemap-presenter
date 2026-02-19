@@ -21,6 +21,14 @@
 	let name = $state('');
 	let domain = $state('');
 
+	// YouTrack settings
+	let ytBaseUrl = $state('');
+	let ytProjectId = $state('');
+	let ytToken = $state('');
+	let ytSaving = $state(false);
+	let ytTesting = $state(false);
+	let ytTestResult = $state<{ success: boolean; message: string } | null>(null);
+
 	async function loadSite() {
 		loading = true;
 		error = null;
@@ -37,6 +45,9 @@
 			site = data;
 			name = data.name;
 			domain = data.domain;
+			ytBaseUrl = data.settings?.youtrack?.baseUrl || '';
+			ytProjectId = data.settings?.youtrack?.projectId || '';
+			ytToken = data.settings?.youtrack?.token || '';
 		} catch (e) {
 			console.error('Failed to load site:', e);
 			error = e instanceof Error ? e.message : 'Failed to load site';
@@ -74,6 +85,70 @@
 			error = e instanceof Error ? e.message : 'Failed to save settings';
 		} finally {
 			saving = false;
+		}
+	}
+
+	async function handleYoutrackSave() {
+		ytSaving = true;
+		error = null;
+		success = null;
+
+		try {
+			const supabase = getSupabase();
+			const currentSettings = site?.settings || {};
+			const newSettings = {
+				...currentSettings,
+				youtrack: {
+					baseUrl: ytBaseUrl.trim() || undefined,
+					projectId: ytProjectId.trim() || undefined,
+					token: ytToken.trim() || undefined
+				}
+			};
+
+			const { error: updateError } = await supabase
+				.from('sites')
+				.update({ settings: newSettings })
+				.eq('id', siteId);
+
+			if (updateError) throw updateError;
+
+			success = 'YouTrack settings saved';
+			if (site) {
+				site = { ...site, settings: newSettings };
+			}
+		} catch (e) {
+			console.error('Failed to save YouTrack settings:', e);
+			error = e instanceof Error ? e.message : 'Failed to save YouTrack settings';
+		} finally {
+			ytSaving = false;
+		}
+	}
+
+	async function handleYoutrackTest() {
+		ytTesting = true;
+		ytTestResult = null;
+
+		try {
+			const res = await fetch('/youtrack/test', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					baseUrl: ytBaseUrl.trim(),
+					token: ytToken.trim(),
+					projectId: ytProjectId.trim()
+				})
+			});
+
+			const data = await res.json();
+			if (data.success) {
+				ytTestResult = { success: true, message: `Connected to project: ${data.projectName}` };
+			} else {
+				ytTestResult = { success: false, message: data.error || 'Connection failed' };
+			}
+		} catch (e) {
+			ytTestResult = { success: false, message: 'Could not reach the server' };
+		} finally {
+			ytTesting = false;
 		}
 	}
 
@@ -280,7 +355,82 @@
 					</form>
 				</div>
 
-				<!-- Danger Zone -->
+				<!-- YouTrack Integration -->
+				<div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+					<div class="px-6 py-4 border-b border-gray-200 bg-blue-50">
+						<h2 class="text-lg font-semibold text-blue-900">YouTrack Integration</h2>
+						<p class="text-sm text-blue-700 mt-1">Connect feedback markers to YouTrack issues</p>
+					</div>
+					<div class="p-6 space-y-4">
+						<div>
+							<label for="yt-base-url" class="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
+							<input
+								type="text"
+								id="yt-base-url"
+								bind:value={ytBaseUrl}
+								placeholder="https://track.liip.ch"
+								class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+							/>
+						</div>
+						<div>
+							<label for="yt-project-id" class="block text-sm font-medium text-gray-700 mb-1">Project ID</label>
+							<input
+								type="text"
+								id="yt-project-id"
+								bind:value={ytProjectId}
+								placeholder="CASG"
+								class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+							/>
+							<p class="text-xs text-gray-500 mt-1">The short name of your YouTrack project</p>
+						</div>
+						<div>
+							<label for="yt-token" class="block text-sm font-medium text-gray-700 mb-1">API Token</label>
+							<input
+								type="password"
+								id="yt-token"
+								bind:value={ytToken}
+								placeholder="perm:xxx-xxx"
+								class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+							/>
+							<p class="text-xs text-gray-500 mt-1">Permanent token with YouTrack scope (read + write)</p>
+						</div>
+
+						{#if ytTestResult}
+							<div class="p-3 rounded-lg text-sm" class:bg-green-50={ytTestResult.success} class:text-green-700={ytTestResult.success} class:bg-red-50={!ytTestResult.success} class:text-red-700={!ytTestResult.success}>
+								{ytTestResult.message}
+							</div>
+						{/if}
+
+						<div class="flex justify-end gap-3">
+							<button
+								type="button"
+								onclick={handleYoutrackTest}
+								disabled={ytTesting || !ytBaseUrl.trim() || !ytProjectId.trim() || !ytToken.trim()}
+								class="px-4 py-2 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+							>
+								{#if ytTesting}
+									Testing...
+								{:else}
+									Test Connection
+								{/if}
+							</button>
+							<button
+								type="button"
+								onclick={handleYoutrackSave}
+								disabled={ytSaving}
+								class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+							>
+								{#if ytSaving}
+									Saving...
+								{:else}
+									Save YouTrack Settings
+								{/if}
+							</button>
+						</div>
+					</div>
+				</div>
+
+			<!-- Danger Zone -->
 				<div class="mt-8 bg-white rounded-xl shadow-sm border border-red-200 overflow-hidden">
 					<div class="px-6 py-4 border-b border-red-200 bg-red-50">
 						<h2 class="text-lg font-semibold text-red-700">Danger Zone</h2>

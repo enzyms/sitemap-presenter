@@ -157,6 +157,7 @@ export interface FeedbackMarker {
 	createdAt: string;
 	updatedAt: string;
 	userAgent?: string;
+	youtrackIssueId?: string | null;
 }
 
 // ============================================================

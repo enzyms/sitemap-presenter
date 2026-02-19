@@ -17,6 +17,12 @@ export interface Site {
   updated_at: string;
 }
 
+export interface YouTrackConfig {
+  baseUrl?: string;
+  projectId?: string;
+  token?: string;
+}
+
 export interface SiteSettings {
   /** Widget primary color */
   primaryColor?: string;
@@ -28,6 +34,8 @@ export interface SiteSettings {
   buttonText?: string;
   /** Allowed domains (for CORS) */
   allowedDomains?: string[];
+  /** YouTrack integration settings */
+  youtrack?: YouTrackConfig;
 }
 
 export interface AnonymousUser {
@@ -51,6 +59,7 @@ export interface Marker {
   fallback_position: FallbackPosition;
   viewport: ViewportInfo;
   status: MarkerStatus;
+  youtrack_issue_id: string | null;
   created_at: string;
   updated_at: string;
 }

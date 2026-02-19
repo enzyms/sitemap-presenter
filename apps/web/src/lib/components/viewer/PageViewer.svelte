@@ -40,6 +40,12 @@
 	let iframeSrc = $state<string | null>(null);
 
 	let feedbackMarkers = $derived(feedbackStore.markersForCurrentPage.map(convertSupabaseMarkerToFeedback));
+	let currentSiteId = $derived(feedbackStore.site?.id ?? '');
+	let youtrackConfig = $derived(feedbackStore.site?.settings?.youtrack);
+	let isYoutrackConfigured = $derived(
+		!!(youtrackConfig?.baseUrl && youtrackConfig?.projectId && youtrackConfig?.token)
+	);
+	let youtrackBaseUrl = $derived(youtrackConfig?.baseUrl?.replace(/\/+$/, '') ?? '');
 	let activeTabFilter = $state<'active' | 'archived'>('active');
 
 	let tabMarkers = $derived(
@@ -285,6 +291,16 @@
 		messenger.addComment(markerId, content);
 	}
 
+	function handleMarkerUpdate(markerId: string, updates: Partial<FeedbackMarker>) {
+		// Update the youtrack_issue_id in Supabase (already done server-side),
+		// just refresh local store to pick up the change
+		if (updates.youtrackIssueId !== undefined) {
+			feedbackStore.markers = feedbackStore.markers.map((m) =>
+				m.id === markerId ? { ...m, youtrack_issue_id: updates.youtrackIssueId ?? null } : m
+			);
+		}
+	}
+
 	function handleFilterChange(status: 'all' | 'active' | MarkerStatus) {
 		messenger.filterByStatus(status);
 		// Track which tab is active for viewport counts
@@ -524,12 +540,16 @@
 				<FeedbackSidebar
 					markers={feedbackMarkers}
 					{highlightedMarkerId}
+					siteId={currentSiteId}
+					{isYoutrackConfigured}
+					{youtrackBaseUrl}
 					onMarkerHover={handleMarkerHover}
 					onMarkerClick={handleMarkerClick}
 					onStatusChange={handleMarkerStatusChange}
 					onDelete={handleMarkerDelete}
 					onComment={handleMarkerComment}
 					onFilterChange={handleFilterChange}
+					onMarkerUpdate={handleMarkerUpdate}
 				/>
 			{/if}
 		</div>

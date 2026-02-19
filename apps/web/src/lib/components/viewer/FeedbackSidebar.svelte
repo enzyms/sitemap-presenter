@@ -7,23 +7,31 @@
 	interface Props {
 		markers: FeedbackMarker[];
 		highlightedMarkerId: string | null;
+		siteId: string;
+		isYoutrackConfigured: boolean;
+		youtrackBaseUrl?: string;
 		onMarkerHover: (markerId: string | null) => void;
 		onMarkerClick: (marker: FeedbackMarker) => void;
 		onStatusChange: (markerId: string, status: MarkerStatus) => void;
 		onDelete: (markerId: string) => void;
 		onComment: (markerId: string, content: string) => void;
 		onFilterChange: (status: 'all' | 'active' | MarkerStatus) => void;
+		onMarkerUpdate?: (markerId: string, updates: Partial<FeedbackMarker>) => void;
 	}
 
 	let {
 		markers,
 		highlightedMarkerId,
+		siteId,
+		isYoutrackConfigured,
+		youtrackBaseUrl,
 		onMarkerHover,
 		onMarkerClick,
 		onStatusChange,
 		onDelete,
 		onComment,
-		onFilterChange
+		onFilterChange,
+		onMarkerUpdate
 	}: Props = $props();
 
 	let activeTab = $state<'feedbacks' | 'archives'>('feedbacks');
@@ -34,6 +42,8 @@
 	// Youtrack & Autofix modals
 	let showYoutrackModal = $state<FeedbackMarker | null>(null);
 	let showAutofixModal = $state<FeedbackMarker | null>(null);
+	let youtrackSending = $state(false);
+	let youtrackError = $state<string | null>(null);
 
 	// Active (non-archived) markers
 	let activeMarkers = $derived(markers.filter((m) => m.status !== 'archived'));
@@ -113,11 +123,42 @@
 		openMenuId = null;
 	}
 
-	function handleSendToYoutrack(text: string, includeScreenshot: boolean): void {
-		// TODO: Implement Youtrack API integration
-		console.log('Send to Youtrack:', { marker: showYoutrackModal, text, includeScreenshot });
-		alert('Sent to Youtrack! (integration pending)');
-		showYoutrackModal = null;
+	async function handleSendToYoutrack(text: string, includeScreenshot: boolean): Promise<void> {
+		if (!showYoutrackModal) return;
+
+		const marker = showYoutrackModal;
+		youtrackSending = true;
+		youtrackError = null;
+
+		try {
+			const summary = `Feedback #${marker.number} on ${marker.pagePath}`;
+			const res = await fetch('/youtrack', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					siteId,
+					markerId: marker.id,
+					summary,
+					description: text,
+					includeScreenshot,
+					pageUrl: marker.pageUrl
+				})
+			});
+
+			const data = await res.json();
+
+			if (!res.ok) {
+				throw new Error(data.error || 'Failed to create YouTrack issue');
+			}
+
+			// Update local marker
+			onMarkerUpdate?.(marker.id, { youtrackIssueId: data.issueId });
+			showYoutrackModal = null;
+		} catch (e) {
+			youtrackError = e instanceof Error ? e.message : 'Failed to send to YouTrack';
+		} finally {
+			youtrackSending = false;
+		}
 	}
 
 	function handleSendToAutofix(text: string, includeScreenshot: boolean): void {
@@ -237,6 +278,7 @@
 						isHighlighted={highlightedMarkerId === marker.id}
 						isMenuOpen={openMenuId === marker.id}
 						isExpanded={expandedMarkerId === marker.id}
+						{youtrackBaseUrl}
 						onhover={onMarkerHover}
 						onclick={() => onMarkerClick(marker)}
 						ontogglemenu={(e) => toggleMenu(e, marker.id)}
@@ -257,7 +299,11 @@
 {#if showYoutrackModal}
 	<YoutrackModal
 		marker={showYoutrackModal}
-		onclose={() => (showYoutrackModal = null)}
+		{isYoutrackConfigured}
+		{siteId}
+		sending={youtrackSending}
+		error={youtrackError}
+		onclose={() => { showYoutrackModal = null; youtrackError = null; }}
 		onsend={handleSendToYoutrack}
 	/>
 {/if}
