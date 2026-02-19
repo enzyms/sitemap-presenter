@@ -355,6 +355,7 @@ ${y}`}class C extends Error{constructor({message:e,code:t,cause:s,name:i}){var n
     flex: 1;
     display: flex;
     flex-direction: column;
+    border-top: 1px solid #e4e6ea;
   }
 
   .comment-input {
