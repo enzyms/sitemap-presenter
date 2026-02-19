@@ -541,6 +541,7 @@
 					markers={feedbackMarkers}
 					{highlightedMarkerId}
 					siteId={currentSiteId}
+					nodeId={sitemapStore.selectedNodeId}
 					{isYoutrackConfigured}
 					{youtrackBaseUrl}
 					onMarkerHover={handleMarkerHover}

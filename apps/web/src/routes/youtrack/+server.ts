@@ -10,7 +10,7 @@ function getServerSupabase() {
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = await request.json();
-		const { siteId, markerId, summary, description, includeScreenshot, pageUrl } = body;
+		const { siteId, markerId, summary, description, nodeId } = body;
 
 		if (!siteId || !markerId || !summary) {
 			return json({ error: 'Missing required fields: siteId, markerId, summary' }, { status: 400 });
@@ -35,7 +35,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// 2. Build issue description with backlink
-		const backlink = `\n\n---\n[View in Sitemap Presenter](https://sitemap-presenter.netlify.app/sites/${siteId}/viewer?marker=${markerId})`;
+		const mapPath = nodeId ? `/sites/${siteId}/map/${nodeId}` : `/sites/${siteId}/map`;
+		const backlink = `\n\n---\n[View in Sitemap Presenter](https://sitemap-presenter.netlify.app${mapPath})`;
 		const fullDescription = description ? description + backlink : backlink;
 
 		// 3. Create issue in YouTrack
@@ -67,34 +68,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const issueId = issue.idReadable; // e.g. "CASG-123"
 		const issueUrl = `${baseUrl}/issue/${issueId}`;
 
-		// 4. Optionally attach screenshot
-		if (includeScreenshot && pageUrl) {
-			try {
-				// Fetch screenshot from the Express API server
-				const apiBase = 'http://localhost:3002';
-				const encodedUrl = encodeURIComponent(pageUrl);
-				const screenshotRes = await fetch(`${apiBase}/crawl/screenshots/thumbnail?url=${encodedUrl}`);
-
-				if (screenshotRes.ok) {
-					const screenshotBlob = await screenshotRes.blob();
-					const formData = new FormData();
-					formData.append('file', screenshotBlob, 'screenshot.png');
-
-					await fetch(`${baseUrl}/api/issues/${issue.id}/attachments`, {
-						method: 'POST',
-						headers: {
-							Authorization: `Bearer ${ytConfig.token}`
-						},
-						body: formData
-					});
-				}
-			} catch (e) {
-				// Screenshot attachment is best-effort, don't fail the whole request
-				console.error('Failed to attach screenshot:', e);
-			}
-		}
-
-		// 5. Update marker with YouTrack issue ID
+		// 4. Update marker with YouTrack issue ID
 		const { error: updateError } = await supabase
 			.from('markers')
 			.update({ youtrack_issue_id: issueId })

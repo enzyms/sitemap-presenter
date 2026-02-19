@@ -5,35 +5,93 @@
 		marker: FeedbackMarker;
 		isYoutrackConfigured: boolean;
 		siteId: string;
+		nodeId?: string | null;
 		sending?: boolean;
 		error?: string | null;
 		onclose: () => void;
-		onsend: (text: string, includeScreenshot: boolean) => void;
+		onsend: (summary: string, description: string) => void;
 	}
 
-	let { marker, isYoutrackConfigured, siteId, sending = false, error = null, onclose, onsend }: Props = $props();
+	let { marker, isYoutrackConfigured, siteId, nodeId = null, sending = false, error = null, onclose, onsend }: Props = $props();
 
-	function buildInitialText(): string {
-		const parts: string[] = [];
-		if (marker.anchor.selector) {
-			parts.push(`Element: ${marker.anchor.selector}`);
-		}
+	function buildDefaultSummary(): string {
 		if (marker.comments.length > 0) {
-			parts.push('');
-			parts.push('Comments:');
-			marker.comments.forEach((c) => {
-				parts.push(`- ${c.content}`);
-			});
+			const firstComment = marker.comments[0].content.trim();
+			if (firstComment.length > 100) {
+				return firstComment.slice(0, 97) + '...';
+			}
+			return firstComment;
 		}
-		return parts.join('\n');
+		return `Feedback #${marker.number} on ${marker.pagePath}`;
 	}
 
-	let text = $state(buildInitialText());
-	let includeScreenshot = $state(false);
+	function formatDate(dateStr: string): string {
+		const date = new Date(dateStr);
+		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+	}
+
+	function buildDescription(): string {
+		const sections: string[] = [];
+
+		// Page section
+		const pageLines: string[] = [];
+		if (marker.pageTitle) {
+			pageLines.push(`**Title:** ${marker.pageTitle}`);
+		}
+		pageLines.push(`**URL:** ${marker.pageUrl}`);
+		pageLines.push(`**Path:** ${marker.pagePath}`);
+		if (pageLines.length > 0) {
+			sections.push(`## Page\n${pageLines.join('\n')}`);
+		}
+
+		// Element section
+		const elementLines: string[] = [];
+		if (marker.anchor.tagName) {
+			elementLines.push(`**Tag:** \`${marker.anchor.tagName}\``);
+		}
+		if (marker.anchor.selector) {
+			elementLines.push(`**Selector:** \`${marker.anchor.selector}\``);
+		}
+		if (marker.anchor.innerText) {
+			elementLines.push(`**Text:** "${marker.anchor.innerText}"`);
+		}
+		if (elementLines.length > 0) {
+			sections.push(`## Element\n${elementLines.join('\n')}`);
+		}
+
+		// Device / Viewport section
+		if (marker.viewport) {
+			const vpLines: string[] = [];
+			vpLines.push(`**Viewport:** ${marker.viewport.width} \u00d7 ${marker.viewport.height}`);
+			vpLines.push(`**Pixel ratio:** ${marker.viewport.devicePixelRatio}x`);
+			vpLines.push(`**Scroll position:** ${marker.viewport.scrollX}, ${marker.viewport.scrollY}`);
+			sections.push(`## Device / Viewport\n${vpLines.join('\n')}`);
+		}
+
+		// Comments section
+		if (marker.comments.length > 0) {
+			const commentLines = marker.comments.map((c) => {
+				const dateFormatted = formatDate(c.createdAt);
+				return `**${c.author}** (${dateFormatted}):\n${c.content}`;
+			});
+			sections.push(`## Comments\n${commentLines.join('\n\n')}`);
+		}
+
+		// Link section
+		if (nodeId) {
+			const origin = window.location.origin;
+			sections.push(`## Link\n[View in Sitemap Presenter](${origin}/sites/${siteId}/map/${nodeId})`);
+		}
+
+		return sections.join('\n\n');
+	}
+
+	let summary = $state(buildDefaultSummary());
+	let text = $state(buildDescription());
 
 	function handleSend() {
-		if (!text.trim() || sending) return;
-		onsend(text, includeScreenshot);
+		if (!summary.trim() || !text.trim() || sending) return;
+		onsend(summary, text);
 	}
 </script>
 
@@ -97,6 +155,20 @@
 			</div>
 		{:else}
 			<div class="mb-4">
+				<label for="youtrack-summary" class="block text-sm font-medium text-gray-700 mb-2"
+					>Issue title</label
+				>
+				<input
+					id="youtrack-summary"
+					type="text"
+					bind:value={summary}
+					placeholder="Issue title..."
+					disabled={sending}
+					class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-50"
+				/>
+			</div>
+
+			<div class="mb-4">
 				<label for="youtrack-text" class="block text-sm font-medium text-gray-700 mb-2"
 					>Issue description</label
 				>
@@ -108,18 +180,6 @@
 					disabled={sending}
 					class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono text-sm disabled:opacity-50"
 				></textarea>
-			</div>
-
-			<div class="mb-4">
-				<label class="flex items-center gap-2 cursor-pointer">
-					<input
-						type="checkbox"
-						bind:checked={includeScreenshot}
-						disabled={sending}
-						class="w-4 h-4 text-blue-500 border-gray-300 rounded focus:ring-blue-500"
-					/>
-					<span class="text-sm text-gray-700">Add related screenshot</span>
-				</label>
 			</div>
 
 			{#if error}
@@ -139,7 +199,7 @@
 			{#if isYoutrackConfigured}
 				<button
 					onclick={handleSend}
-					disabled={!text.trim() || sending}
+					disabled={!summary.trim() || !text.trim() || sending}
 					class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
 				>
 					{#if sending}

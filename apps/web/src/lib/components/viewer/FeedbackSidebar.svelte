@@ -8,6 +8,7 @@
 		markers: FeedbackMarker[];
 		highlightedMarkerId: string | null;
 		siteId: string;
+		nodeId?: string | null;
 		isYoutrackConfigured: boolean;
 		youtrackBaseUrl?: string;
 		onMarkerHover: (markerId: string | null) => void;
@@ -23,6 +24,7 @@
 		markers,
 		highlightedMarkerId,
 		siteId,
+		nodeId = null,
 		isYoutrackConfigured,
 		youtrackBaseUrl,
 		onMarkerHover,
@@ -123,7 +125,7 @@
 		openMenuId = null;
 	}
 
-	async function handleSendToYoutrack(text: string, includeScreenshot: boolean): Promise<void> {
+	async function handleSendToYoutrack(summary: string, description: string): Promise<void> {
 		if (!showYoutrackModal) return;
 
 		const marker = showYoutrackModal;
@@ -131,7 +133,6 @@
 		youtrackError = null;
 
 		try {
-			const summary = `Feedback #${marker.number} on ${marker.pagePath}`;
 			const res = await fetch('/youtrack', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -139,9 +140,8 @@
 					siteId,
 					markerId: marker.id,
 					summary,
-					description: text,
-					includeScreenshot,
-					pageUrl: marker.pageUrl
+					description,
+					nodeId
 				})
 			});
 
@@ -301,6 +301,7 @@
 		marker={showYoutrackModal}
 		{isYoutrackConfigured}
 		{siteId}
+		{nodeId}
 		sending={youtrackSending}
 		error={youtrackError}
 		onclose={() => { showYoutrackModal = null; youtrackError = null; }}
