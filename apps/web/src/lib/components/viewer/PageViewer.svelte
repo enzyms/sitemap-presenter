@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import { pageViewerStore } from '$lib/stores/pageViewer.svelte';
 	import { sitemapStore } from '$lib/stores/sitemap.svelte';
 	import { projectsStore } from '$lib/stores/projects.svelte';
@@ -330,10 +331,10 @@
 	<!-- Backdrop -->
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="fixed inset-0 bg-black/60 z-50" onclick={handleClose}></div>
+	<div class="fixed inset-0 bg-black/60 z-50" transition:fade={{ duration: 200 }} onclick={handleClose}></div>
 
 	<!-- Viewer -->
-	<div class="fixed inset-4 z-50 flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden">
+	<div class="fixed inset-4 z-50 flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden" transition:fade={{ duration: 200 }}>
 		<!-- Header -->
 		<header class="flex items-center justify-between px-4 py-3 border-b bg-gray-200">
 			<div class="flex items-center gap-4 flex-1 min-w-0">

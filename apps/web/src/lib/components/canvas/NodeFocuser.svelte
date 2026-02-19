@@ -1,11 +1,40 @@
 <script lang="ts">
 	import { useSvelteFlow } from '@xyflow/svelte';
+	import { browser } from '$app/environment';
 	import { sitemapStore } from '$lib/stores/sitemap.svelte';
+	import { pageViewerStore } from '$lib/stores/pageViewer.svelte';
 
-	const { fitBounds } = useSvelteFlow();
+	const VIEWPORT_KEY = 'sitemap-viewport';
+	const { fitBounds, getViewport, setViewport } = useSvelteFlow();
 
 	let lastFocusedId: string | null = null;
+	let wasViewerOpen = false;
 
+	// Save/restore viewport around viewer open/close
+	$effect(() => {
+		const isOpen = pageViewerStore.isOpen;
+		if (!wasViewerOpen && isOpen && browser) {
+			// Viewer just opened — save current viewport per layout mode
+			const key = `${VIEWPORT_KEY}-${sitemapStore.layoutMode}`;
+			localStorage.setItem(key, JSON.stringify(getViewport()));
+		}
+		if (wasViewerOpen && !isOpen && browser) {
+			// Viewer just closed — restore saved viewport
+			const key = `${VIEWPORT_KEY}-${sitemapStore.layoutMode}`;
+			const saved = localStorage.getItem(key);
+			if (saved) {
+				try {
+					setViewport(JSON.parse(saved));
+				} catch { /* ignore */ }
+				localStorage.removeItem(key);
+			}
+			// Prevent the focus effect from overriding the restored viewport
+			lastFocusedId = sitemapStore.selectedNodeId;
+		}
+		wasViewerOpen = isOpen;
+	});
+
+	// Focus on selected node
 	$effect(() => {
 		const nodeId = sitemapStore.selectedNodeId;
 		if (!nodeId || nodeId === lastFocusedId) return;
