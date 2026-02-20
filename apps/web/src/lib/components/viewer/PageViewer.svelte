@@ -17,7 +17,8 @@
 	let iframeError = $state(false);
 	let loadTimeout: ReturnType<typeof setTimeout>;
 	let iframeRef = $state<HTMLIFrameElement | null>(null);
-	let highlightedMarkerId = $state<string | null>(null);
+	let hoveredMarkerId = $state<string | null>(null);
+	let highlightedMarkerId = $derived(hoveredMarkerId ?? pageViewerStore.highlightedMarkerId);
 	let showFeedbackSidebar = $state(true);
 	let initialLoadComplete = $state(false);
 
@@ -137,12 +138,25 @@
 		}
 	});
 
+	// Deep-link: resize viewport once markers are available.
+	// The iframe highlight is deferred to handleIframeNavigation (same-page)
+	// because the widget isn't ready to receive messages until it fires FEEDBACK_NAVIGATION.
+	$effect(() => {
+		const markerId = pageViewerStore.initialMarkerId;
+		if (!markerId || feedbackMarkers.length === 0) return;
+
+		const marker = feedbackMarkers.find((m) => m.id === markerId);
+		if (!marker) return;
+
+		iframeWidth = marker.viewport.width;
+	});
+
 	function handleClose() {
 		pageViewerStore.closeViewer();
 		feedbackStore.setCurrentPage(null);
 		iframeLoaded = false;
 		iframeError = false;
-		highlightedMarkerId = null;
+		hoveredMarkerId = null;
 		initialLoadComplete = false;
 		iframeSrc = null;
 		iframeWidth = 'auto';
@@ -168,7 +182,8 @@
 		iframeError = false;
 		initialLoadComplete = false;
 		iframeSrc = null;
-		highlightedMarkerId = null;
+		hoveredMarkerId = null;
+		pageViewerStore.highlightedMarkerId = null;
 		iframeWidth = 'auto';
 
 	}
@@ -232,31 +247,43 @@
 			case 'FEEDBACK_NAVIGATION':
 				handleIframeNavigation(data.url, data.title, data.markers);
 				break;
+			case 'FEEDBACK_MARKER_SELECTED':
+				pageViewerStore.highlightedMarkerId = data.markerId;
+				break;
 		}
 	}
 
 	function handleIframeNavigation(newUrl: string, newTitle: string, markers?: FeedbackMarker[]) {
-		// Update the display URL + title (does NOT touch iframeSrc, so no iframe reload).
-		// This also triggers the $effect above which filters feedbacks to this page.
+		const isSamePage = normalizeUrl(newUrl) === normalizeUrl(pageViewerStore.pageUrl || '');
+
 		pageViewerStore.updateCurrentPage(newUrl, newTitle);
 
-		// Reset viewport to full width on page change
-		iframeWidth = 'auto';
-
-
-		// Find & select the matching node
-		const matchingNode = findNodeByUrl(newUrl);
-		if (matchingNode) {
-			sitemapStore.selectNode(matchingNode.id);
-			if (matchingNode.data.thumbnailUrl) {
-				pageViewerStore.updateScreenshot(matchingNode.data.thumbnailUrl || null);
+		if (isSamePage) {
+			// Widget's initial load report — send any pending deep-link highlight
+			// now that the widget is ready to receive messages.
+			const pendingMarkerId = pageViewerStore.initialMarkerId;
+			if (pendingMarkerId) {
+				pageViewerStore.initialMarkerId = null;
+				messenger.highlightMarker(pendingMarkerId);
 			}
 		} else {
-			sitemapStore.selectNode(null);
-			pageViewerStore.updateScreenshot(null);
-		}
+			// Actual navigation to a different page — reset state.
+			iframeWidth = 'auto';
 
-		highlightedMarkerId = null;
+			const matchingNode = findNodeByUrl(newUrl);
+			if (matchingNode) {
+				sitemapStore.selectNode(matchingNode.id);
+				if (matchingNode.data.thumbnailUrl) {
+					pageViewerStore.updateScreenshot(matchingNode.data.thumbnailUrl || null);
+				}
+			} else {
+				sitemapStore.selectNode(null);
+				pageViewerStore.updateScreenshot(null);
+			}
+
+			hoveredMarkerId = null;
+			pageViewerStore.highlightedMarkerId = null;
+		}
 
 		// Cache widget-provided markers on the project
 		if (markers && markers.length > 0 && projectsStore.currentProjectId && pageViewerStore.pageUrl) {
@@ -266,11 +293,11 @@
 
 	// Sidebar callbacks
 	function handleMarkerHover(markerId: string | null) {
-		highlightedMarkerId = markerId;
+		hoveredMarkerId = markerId;
 	}
 
 	function handleMarkerClick(marker: FeedbackMarker) {
-		highlightedMarkerId = marker.id;
+		pageViewerStore.highlightedMarkerId = marker.id;
 		messenger.highlightMarker(marker.id);
 		// Resize iframe to marker's viewport width
 		iframeWidth = marker.viewport.width;
@@ -540,6 +567,7 @@
 				<FeedbackSidebar
 					markers={feedbackMarkers}
 					{highlightedMarkerId}
+					selectedMarkerId={pageViewerStore.highlightedMarkerId}
 					siteId={currentSiteId}
 					nodeId={sitemapStore.selectedNodeId}
 					{isYoutrackConfigured}

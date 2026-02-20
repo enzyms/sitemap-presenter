@@ -20,6 +20,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let initialNodeId = page.params.nodeId ?? null;
+	let initialMarkerId = page.url.searchParams.get('marker');
 	let initialView = page.url.searchParams.get('view');
 
 	let routerReady = $state(false);
@@ -215,21 +216,29 @@
 
 			const node = sitemapStore.nodes.find((n) => n.id === nodeId);
 			if (node) {
+				const markerId = initialMarkerId;
+				initialMarkerId = null;
 				sitemapStore.selectNode(nodeId);
 				pageViewerStore.openViewer(
 					node.data.url,
 					node.data.title,
 					node.data.thumbnailUrl || null,
-					nodeId
+					nodeId,
+					markerId
 				);
+				// Set highlighted marker immediately so URL sync preserves ?marker=
+				if (markerId) {
+					pageViewerStore.highlightedMarkerId = markerId;
+				}
 			}
 		}
 	});
 
-	// Sync selectedNodeId + layoutMode → URL (only after router is ready)
+	// Sync selectedNodeId + layoutMode + marker → URL (only after router is ready)
 	$effect(() => {
 		const nodeId = sitemapStore.selectedNodeId;
 		const layoutMode = sitemapStore.layoutMode;
+		const markerId = pageViewerStore.highlightedMarkerId;
 
 		if (!routerReady || !siteId) return;
 
@@ -240,6 +249,9 @@
 		const url = new URL(path, page.url.origin);
 		if (layoutMode === 'radial') {
 			url.searchParams.set('view', 'radial');
+		}
+		if (markerId && nodeId) {
+			url.searchParams.set('marker', markerId);
 		}
 
 		replaceState(url, { selectedNodeId: nodeId });

@@ -80,7 +80,8 @@
 		// Link section
 		if (nodeId) {
 			const origin = window.location.origin;
-			sections.push(`## Link\n[View in Sitemap Presenter](${origin}/sites/${siteId}/map/${nodeId})`);
+			const markerParam = marker.id ? `?marker=${marker.id}` : '';
+			sections.push(`## Link\n[View in Sitemap Presenter](${origin}/sites/${siteId}/map/${nodeId}${markerParam})`);
 		}
 
 		return sections.join('\n\n');

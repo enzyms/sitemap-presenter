@@ -36,7 +36,8 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		// 2. Build issue description with backlink
 		const mapPath = nodeId ? `/sites/${siteId}/map/${nodeId}` : `/sites/${siteId}/map`;
-		const backlink = `\n\n---\n[View in Sitemap Presenter](https://sitemap-presenter.netlify.app${mapPath})`;
+		const markerParam = markerId ? `?marker=${markerId}` : '';
+		const backlink = `\n\n---\n[View in Sitemap Presenter](https://sitemap-presenter.netlify.app${mapPath}${markerParam})`;
 		const fullDescription = description ? description + backlink : backlink;
 
 		// 3. Create issue in YouTrack

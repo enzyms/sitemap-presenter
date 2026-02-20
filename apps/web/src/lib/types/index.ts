@@ -263,6 +263,12 @@ export interface MarkersVisibilityMessage {
 	visibility: Record<string, boolean>; // markerId → visible
 }
 
+/** Notification: a marker was clicked/opened (or deselected) in the iframe */
+export interface MarkerSelectedMessage {
+	type: 'FEEDBACK_MARKER_SELECTED';
+	markerId: string | null;
+}
+
 export type IframeToSitemapMessage =
 	| MarkersResponseMessage
 	| MarkerCreatedMessage
@@ -270,7 +276,8 @@ export type IframeToSitemapMessage =
 	| MarkerDeletedMessage
 	| ActionConfirmMessage
 	| NavigationMessage
-	| MarkersVisibilityMessage;
+	| MarkersVisibilityMessage
+	| MarkerSelectedMessage;
 
 // API response types
 export interface StartCrawlResponse {

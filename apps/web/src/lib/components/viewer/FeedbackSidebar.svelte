@@ -7,6 +7,7 @@
 	interface Props {
 		markers: FeedbackMarker[];
 		highlightedMarkerId: string | null;
+		selectedMarkerId?: string | null;
 		siteId: string;
 		nodeId?: string | null;
 		isYoutrackConfigured: boolean;
@@ -23,6 +24,7 @@
 	let {
 		markers,
 		highlightedMarkerId,
+		selectedMarkerId = null,
 		siteId,
 		nodeId = null,
 		isYoutrackConfigured,
@@ -46,6 +48,13 @@
 	let showAutofixModal = $state<FeedbackMarker | null>(null);
 	let youtrackSending = $state(false);
 	let youtrackError = $state<string | null>(null);
+
+	// Auto-expand the flyout when a marker is selected (deep-link or iframe click)
+	$effect(() => {
+		if (selectedMarkerId) {
+			expandedMarkerId = selectedMarkerId;
+		}
+	});
 
 	// Active (non-archived) markers
 	let activeMarkers = $derived(markers.filter((m) => m.status !== 'archived'));

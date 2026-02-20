@@ -747,6 +747,12 @@ export class FeedbackWidget extends HTMLElement {
 
     this.activeMarkerId = marker.id;
 
+    // Notify parent (sitemap-presenter) that a marker was selected
+    this.sendToParent({
+      type: 'FEEDBACK_MARKER_SELECTED',
+      markerId: marker.id
+    });
+
     // Create panel as plain class instance
     this.commentsPanel = new CommentsPanel();
     this.commentsPanel.setMarker(marker);
@@ -881,6 +887,12 @@ export class FeedbackWidget extends HTMLElement {
       this.commentsPanel.destroy();
       this.commentsPanel = null;
       this.activeMarkerId = null;
+
+      // Notify parent that no marker is selected
+      this.sendToParent({
+        type: 'FEEDBACK_MARKER_SELECTED',
+        markerId: null
+      });
     }
   }
 
