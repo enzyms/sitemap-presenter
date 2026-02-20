@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 
 	interface Props {
 		siteName?: string;
@@ -18,6 +19,11 @@
 		if (path.includes('/settings')) return 'settings';
 		return 'sites';
 	});
+
+	async function signOut() {
+		await $page.data.supabase.auth.signOut();
+		goto('/login');
+	}
 </script>
 
 <header class="bg-white border-b border-gray-200 px-4 py-3 flex items-center z-10 shadow-sm">
@@ -110,5 +116,14 @@
 				New Site
 			</a>
 		{/if}
+		<button
+			onclick={signOut}
+			class="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-lg hover:bg-gray-100"
+			title="Sign out"
+		>
+			<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+			</svg>
+		</button>
 	</div>
 </header>

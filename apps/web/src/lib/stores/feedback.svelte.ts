@@ -118,10 +118,49 @@ class FeedbackStore {
 			}));
 			this.currentPagePath = pagePath || null;
 			this.loading = false;
+
+			// Fire-and-forget: sync YouTrack status in background
+			this.syncYoutrackStatus();
 		} catch (e) {
 			console.error('Failed to load markers:', e);
 			this.loading = false;
 			this.error = e instanceof Error ? e.message : 'Failed to load markers';
+		}
+	}
+
+	private async syncYoutrackStatus(): Promise<void> {
+		if (!this.site) return;
+
+		const markersWithYT = this.markers.filter((m) => m.youtrack_issue_id);
+		if (markersWithYT.length === 0) return;
+
+		try {
+			const res = await fetch('/youtrack/sync', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					siteId: this.site.id,
+					markers: markersWithYT.map((m) => ({
+						id: m.id,
+						youtrackIssueId: m.youtrack_issue_id
+					}))
+				})
+			});
+
+			if (!res.ok) return;
+
+			const { archived, deleted }: { archived: string[]; deleted: string[] } = await res.json();
+
+			if (archived.length === 0 && deleted.length === 0) return;
+
+			const archivedSet = new Set(archived);
+			const deletedSet = new Set(deleted);
+
+			this.markers = this.markers
+				.filter((m) => !deletedSet.has(m.id))
+				.map((m) => (archivedSet.has(m.id) ? { ...m, status: 'archived' as MarkerStatus } : m));
+		} catch {
+			// Sync is best-effort — silently ignore errors
 		}
 	}
 
