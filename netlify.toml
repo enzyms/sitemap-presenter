@@ -1,5 +1,5 @@
 [build]
-  command = "pnpm build:widget && cp packages/widget/dist/widget.js apps/web/static/widget/ && cd apps/web && pnpm build"
+  command = "pnpm build:widget && mkdir -p apps/web/static/widget && cp packages/widget/dist/widget.js apps/web/static/widget/ && cd apps/web && pnpm build"
   publish = "apps/web/build"
 
 [build.environment]
