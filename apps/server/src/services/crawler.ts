@@ -92,16 +92,13 @@ export class CrawlerService {
 						pages.set(url, pageInfo);
 						callbacks.onPageDiscovered(pageInfo);
 
-						// Check if this page's path matches an exclude pattern
-						// If so, skip enqueuing its children
-						const currentPathname = new URL(url).pathname;
-						const isExcluded =
-							config.excludePatterns?.some((p) => matchPattern(currentPathname, p)) ?? false;
-
-						if (!isExcluded) {
-							// Add internal links to queue
-							for (const link of pageInfo.internalLinks) {
-								if (!this.visited.has(link) && depth + 1 <= config.maxDepth) {
+						// Add internal links to queue, skipping excluded destinations
+						for (const link of pageInfo.internalLinks) {
+							if (!this.visited.has(link) && depth + 1 <= config.maxDepth) {
+								const linkPathname = new URL(link).pathname;
+								const isExcluded =
+									config.excludePatterns?.some((p) => matchPattern(linkPathname, p)) ?? false;
+								if (!isExcluded) {
 									queue.push({ url: link, depth: depth + 1, parentUrl: url });
 								}
 							}

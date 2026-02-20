@@ -23,6 +23,13 @@ export interface YouTrackConfig {
   token?: string;
 }
 
+export interface CrawlSiteSettings {
+  excludePatterns?: string[];
+  includeUrls?: string[];
+  httpUser?: string;
+  httpPassword?: string;
+}
+
 export interface SiteSettings {
   /** Widget primary color */
   primaryColor?: string;
@@ -36,6 +43,8 @@ export interface SiteSettings {
   allowedDomains?: string[];
   /** YouTrack integration settings */
   youtrack?: YouTrackConfig;
+  /** Crawl settings (exclude/include patterns, HTTP auth) */
+  crawl?: CrawlSiteSettings;
 }
 
 export interface AnonymousUser {

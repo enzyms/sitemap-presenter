@@ -44,9 +44,12 @@
 			if (fetchError) throw fetchError;
 			site = data;
 
-			// Prefill config with site's domain
+			// Prefill config with site's domain and saved crawl settings
 			if (site?.domain) {
 				configStore.setUrl(site.domain.startsWith('http') ? site.domain : `https://${site.domain}`);
+			}
+			if (site?.settings?.crawl) {
+				configStore.loadFromSiteSettings(site.settings.crawl);
 			}
 
 			// Initialize feedback store for this site

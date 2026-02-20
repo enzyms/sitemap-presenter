@@ -1,4 +1,5 @@
 import type { CrawlConfig } from '$lib/types';
+import type { CrawlSiteSettings } from '@sitemap-presenter/shared';
 
 const defaultConfig: CrawlConfig = {
 	url: '',
@@ -45,6 +46,14 @@ class ConfigStore {
 
 	removeIncludeUrl(index: number) {
 		this.includeUrls = this.includeUrls.filter((_, i) => i !== index);
+	}
+
+	/** Populate from saved site settings (called on page load). */
+	loadFromSiteSettings(crawl: CrawlSiteSettings) {
+		this.excludePatterns = crawl.excludePatterns ?? [];
+		this.includeUrls = crawl.includeUrls ?? [];
+		this.httpUser = crawl.httpUser ?? '';
+		this.httpPassword = crawl.httpPassword ?? '';
 	}
 
 	reset() {
