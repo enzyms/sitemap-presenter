@@ -1,22 +1,24 @@
 import { redirect, fail } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals: { safeGetSession } }) => {
-	const { session } = await safeGetSession();
+const AUTH_COOKIE = 'auth_email';
 
-	if (session) {
+export const load: PageServerLoad = async ({ locals }) => {
+	if (locals.userEmail) {
 		redirect(303, '/');
 	}
 };
 
 export const actions: Actions = {
-	default: async ({ request, locals: { supabase }, url }) => {
+	default: async ({ request, cookies }) => {
 		const formData = await request.formData();
 		const email = (formData.get('email') as string)?.trim().toLowerCase();
+		const password = (formData.get('password') as string) ?? '';
 
-		if (!email) {
-			return fail(400, { error: 'Please enter your email address.', email });
+		if (!email || !password) {
+			return fail(400, { error: 'Please fill in all fields.', email });
 		}
 
 		const allowedEmails = env.ALLOWED_EMAILS;
@@ -27,17 +29,20 @@ export const actions: Actions = {
 			}
 		}
 
-		const { error } = await supabase.auth.signInWithOtp({
-			email,
-			options: {
-				emailRedirectTo: `${url.origin}/auth/callback`
-			}
-		});
-
-		if (error) {
-			return fail(500, { error: 'Could not send magic link. Try again.', email });
+		console.log('AUTH_PASSWORD from env:', JSON.stringify(env.AUTH_PASSWORD));
+		console.log('Password submitted:', JSON.stringify(password));
+		if (password !== env.AUTH_PASSWORD) {
+			return fail(403, { error: 'Wrong password.', email });
 		}
 
-		return { success: true, email };
+		cookies.set(AUTH_COOKIE, email, {
+			path: '/',
+			httpOnly: true,
+			secure: !dev,
+			sameSite: 'lax',
+			maxAge: 60 * 60 * 24 * 30 // 30 days
+		});
+
+		redirect(303, '/');
 	}
 };
