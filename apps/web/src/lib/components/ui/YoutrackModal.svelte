@@ -36,12 +36,24 @@
 		// Page section
 		const pageLines: string[] = [];
 		if (marker.pageTitle) {
-			pageLines.push(`**Title:** ${marker.pageTitle}`);
+			pageLines.push(`[${marker.pageTitle}](${marker.pageUrl})`);
+		} else {
+			pageLines.push(marker.pageUrl);
 		}
-		pageLines.push(`**URL:** ${marker.pageUrl}`);
-		pageLines.push(`**Path:** ${marker.pagePath}`);
-		if (pageLines.length > 0) {
-			sections.push(`## Page\n${pageLines.join('\n')}`);
+		if (nodeId) {
+			const origin = window.location.origin;
+			const markerParam = marker.id ? `?marker=${marker.id}` : '';
+			pageLines.push(`[View in Sitemap Presenter](${origin}/sites/${siteId}/map/${nodeId}${markerParam})`);
+		}
+		sections.push(`## Page\n\n${pageLines.join('\n\n')}`);
+
+		// Comments section
+		if (marker.comments.length > 0) {
+			const commentLines = marker.comments.map((c) => {
+				const dateFormatted = formatDate(c.createdAt);
+				return `> **${c.content}**\n> ${c.author} (${dateFormatted})`;
+			});
+			sections.push(`---\n\n## Comments\n\n${commentLines.join('\n\n')}`);
 		}
 
 		// Element section
@@ -56,7 +68,7 @@
 			elementLines.push(`**Text:** "${marker.anchor.innerText}"`);
 		}
 		if (elementLines.length > 0) {
-			sections.push(`## Element\n${elementLines.join('\n')}`);
+			sections.push(`---\n\n## Element\n\n${elementLines.join('\n')}`);
 		}
 
 		// Device / Viewport section
@@ -65,23 +77,7 @@
 			vpLines.push(`**Viewport:** ${marker.viewport.width} \u00d7 ${marker.viewport.height}`);
 			vpLines.push(`**Pixel ratio:** ${marker.viewport.devicePixelRatio}x`);
 			vpLines.push(`**Scroll position:** ${marker.viewport.scrollX}, ${marker.viewport.scrollY}`);
-			sections.push(`## Device / Viewport\n${vpLines.join('\n')}`);
-		}
-
-		// Comments section
-		if (marker.comments.length > 0) {
-			const commentLines = marker.comments.map((c) => {
-				const dateFormatted = formatDate(c.createdAt);
-				return `**${c.author}** (${dateFormatted}):\n${c.content}`;
-			});
-			sections.push(`## Comments\n${commentLines.join('\n\n')}`);
-		}
-
-		// Link section
-		if (nodeId) {
-			const origin = window.location.origin;
-			const markerParam = marker.id ? `?marker=${marker.id}` : '';
-			sections.push(`## Link\n[View in Sitemap Presenter](${origin}/sites/${siteId}/map/${nodeId}${markerParam})`);
+			sections.push(`## Device / Viewport\n\n${vpLines.join('\n')}`);
 		}
 
 		return sections.join('\n\n');
@@ -103,7 +99,7 @@
 	onclick={onclose}
 >
 	<div
-		class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 mx-4"
+		class="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 mx-4"
 		onclick={(e) => e.stopPropagation()}
 	>
 		<div class="flex items-start justify-between mb-4">
@@ -176,7 +172,7 @@
 				<textarea
 					id="youtrack-text"
 					bind:value={text}
-					rows="8"
+					rows="12"
 					placeholder="Describe the issue..."
 					disabled={sending}
 					class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono text-sm disabled:opacity-50"
