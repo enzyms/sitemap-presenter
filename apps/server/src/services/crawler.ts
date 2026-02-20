@@ -7,6 +7,13 @@ interface CrawlCallbacks {
 	shouldContinue: () => boolean;
 }
 
+/** Convert a glob path pattern (e.g. `/blog/*`) to a RegExp. */
+function matchPattern(pathname: string, pattern: string): boolean {
+	// Escape regex special chars except *, then convert * to .*
+	const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+	return new RegExp(`^${escaped}$`).test(pathname);
+}
+
 export class CrawlerService {
 	private visited = new Set<string>();
 	private baseUrl: URL | null = null;
@@ -51,6 +58,16 @@ export class CrawlerService {
 			{ url: this.normalizeUrl(config.url), depth: 0, parentUrl: null }
 		];
 
+		// Seed additional include URLs at depth 0
+		if (config.includeUrls) {
+			for (const includeUrl of config.includeUrls) {
+				const normalized = this.normalizeUrl(includeUrl);
+				if (!queue.some((q) => q.url === normalized)) {
+					queue.push({ url: normalized, depth: 0, parentUrl: null });
+				}
+			}
+		}
+
 		try {
 			while (queue.length > 0 && pages.size < config.maxPages) {
 				if (!callbacks.shouldContinue()) {
@@ -75,10 +92,18 @@ export class CrawlerService {
 						pages.set(url, pageInfo);
 						callbacks.onPageDiscovered(pageInfo);
 
-						// Add internal links to queue
-						for (const link of pageInfo.internalLinks) {
-							if (!this.visited.has(link) && depth + 1 <= config.maxDepth) {
-								queue.push({ url: link, depth: depth + 1, parentUrl: url });
+						// Check if this page's path matches an exclude pattern
+						// If so, skip enqueuing its children
+						const currentPathname = new URL(url).pathname;
+						const isExcluded =
+							config.excludePatterns?.some((p) => matchPattern(currentPathname, p)) ?? false;
+
+						if (!isExcluded) {
+							// Add internal links to queue
+							for (const link of pageInfo.internalLinks) {
+								if (!this.visited.has(link) && depth + 1 <= config.maxDepth) {
+									queue.push({ url: link, depth: depth + 1, parentUrl: url });
+								}
 							}
 						}
 					}

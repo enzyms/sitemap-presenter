@@ -4,6 +4,8 @@ export interface CrawlConfig {
 	maxPages: number;
 	httpUser?: string;
 	httpPassword?: string;
+	excludePatterns?: string[];
+	includeUrls?: string[];
 }
 
 export interface PageInfo {

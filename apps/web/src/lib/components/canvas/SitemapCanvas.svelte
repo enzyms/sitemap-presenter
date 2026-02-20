@@ -62,8 +62,11 @@
 	// Crawl settings popover
 	let showCrawlSettings = $state(false);
 	let showAuthFields = $state(false);
+	let showAdvanced = $state(false);
 	let isLoading = $state(false);
 	let crawlError = $state('');
+	let excludeInput = $state('');
+	let includeInput = $state('');
 
 	let isCrawling = $derived(sitemapStore.progress.status === 'crawling' || sitemapStore.progress.status === 'screenshotting');
 	let resultCount = $derived(sitemapStore.filteredNodes.length);
@@ -142,6 +145,22 @@
 	function handleMaxPagesChange(event: Event) {
 		const target = event.target as HTMLInputElement;
 		configStore.setMaxPages(parseInt(target.value, 10));
+	}
+
+	function addExcludePattern() {
+		const trimmed = excludeInput.trim();
+		if (trimmed) {
+			configStore.addExcludePattern(trimmed);
+			excludeInput = '';
+		}
+	}
+
+	function addIncludeUrl() {
+		const trimmed = includeInput.trim();
+		if (trimmed) {
+			configStore.addIncludeUrl(trimmed);
+			includeInput = '';
+		}
 	}
 
 	async function handleStartCrawl() {
@@ -319,6 +338,102 @@
 												class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500"
 											/>
 											<p class="text-xs text-gray-400">For .htaccess or DDEV sites (also ignores SSL errors)</p>
+										</div>
+									{/if}
+								</div>
+
+								<!-- Advanced (collapsible) -->
+								<div>
+									<button
+										type="button"
+										onclick={() => (showAdvanced = !showAdvanced)}
+										class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+									>
+										<svg
+											class="w-3 h-3 transition-transform {showAdvanced ? 'rotate-90' : ''}"
+											fill="none" stroke="currentColor" viewBox="0 0 24 24"
+										>
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+										</svg>
+										Advanced
+									</button>
+									{#if showAdvanced}
+										<div class="mt-2 space-y-3">
+											<!-- Exclude Patterns -->
+											<div>
+												<label for="excludePattern" class="block text-xs font-medium text-gray-600 mb-1">Exclude patterns</label>
+												<div class="flex gap-1.5">
+													<input
+														type="text"
+														id="excludePattern"
+														bind:value={excludeInput}
+														onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addExcludePattern(); } }}
+														placeholder="/blog/*"
+														class="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500"
+													/>
+													<button
+														type="button"
+														onclick={addExcludePattern}
+														disabled={!excludeInput.trim()}
+														class="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+													>
+														Add
+													</button>
+												</div>
+												{#if configStore.excludePatterns.length > 0}
+													<div class="flex flex-wrap gap-1 mt-1.5">
+														{#each configStore.excludePatterns as pattern, index (pattern)}
+															<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gray-100 text-xs text-gray-700">
+																{pattern}
+																<button
+																	type="button"
+																	onclick={() => configStore.removeExcludePattern(index)}
+																	class="text-gray-400 hover:text-gray-600"
+																	title="Remove"
+																>&times;</button>
+															</span>
+														{/each}
+													</div>
+												{/if}
+											</div>
+
+											<!-- Include URLs -->
+											<div>
+												<label for="includeUrl" class="block text-xs font-medium text-gray-600 mb-1">Include URLs</label>
+												<div class="flex gap-1.5">
+													<input
+														type="text"
+														id="includeUrl"
+														bind:value={includeInput}
+														onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addIncludeUrl(); } }}
+														placeholder="https://..."
+														class="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500"
+													/>
+													<button
+														type="button"
+														onclick={addIncludeUrl}
+														disabled={!includeInput.trim()}
+														class="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+													>
+														Add
+													</button>
+												</div>
+												{#if configStore.includeUrls.length > 0}
+													<div class="flex flex-wrap gap-1 mt-1.5">
+														{#each configStore.includeUrls as url, index (url)}
+															<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gray-100 text-xs text-gray-700 max-w-full">
+																<span class="truncate">{url}</span>
+																<button
+																	type="button"
+																	onclick={() => configStore.removeIncludeUrl(index)}
+																	class="text-gray-400 hover:text-gray-600 shrink-0"
+																	title="Remove"
+																>&times;</button>
+															</span>
+														{/each}
+													</div>
+												{/if}
+											</div>
 										</div>
 									{/if}
 								</div>

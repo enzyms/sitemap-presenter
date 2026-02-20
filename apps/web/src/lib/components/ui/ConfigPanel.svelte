@@ -14,6 +14,9 @@
 
 	let isLoading = $state(false);
 	let error = $state('');
+	let advancedOpen = $state(false);
+	let excludeInput = $state('');
+	let includeInput = $state('');
 
 	function handleUrlChange(event: Event) {
 		const target = event.target as HTMLInputElement;
@@ -28,6 +31,36 @@
 	function handleMaxPagesChange(event: Event) {
 		const target = event.target as HTMLInputElement;
 		configStore.setMaxPages(parseInt(target.value, 10));
+	}
+
+	function addExcludePattern() {
+		const trimmed = excludeInput.trim();
+		if (trimmed) {
+			configStore.addExcludePattern(trimmed);
+			excludeInput = '';
+		}
+	}
+
+	function addIncludeUrl() {
+		const trimmed = includeInput.trim();
+		if (trimmed) {
+			configStore.addIncludeUrl(trimmed);
+			includeInput = '';
+		}
+	}
+
+	function handleExcludeKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			addExcludePattern();
+		}
+	}
+
+	function handleIncludeKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			addIncludeUrl();
+		}
 	}
 
 	async function handleSubmit(event: Event) {
@@ -190,6 +223,117 @@
 					<span>250</span>
 					<span>500</span>
 				</div>
+			</div>
+
+			<!-- Advanced Section -->
+			<div class="border-t border-gray-100 pt-3">
+				<button
+					type="button"
+					onclick={() => advancedOpen = !advancedOpen}
+					class="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+				>
+					<svg
+						class="w-4 h-4 transition-transform {advancedOpen ? 'rotate-90' : ''}"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+					</svg>
+					Advanced
+				</button>
+
+				{#if advancedOpen}
+					<div class="mt-3 space-y-4">
+						<!-- Exclude Patterns -->
+						<div>
+							<label for="excludePattern" class="block text-sm font-medium text-gray-700 mb-1">
+								Exclude patterns
+							</label>
+							<div class="flex gap-2">
+								<input
+									type="text"
+									id="excludePattern"
+									bind:value={excludeInput}
+									onkeydown={handleExcludeKeydown}
+									placeholder="/blog/*"
+									class="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+									disabled={isCrawling}
+								/>
+								<button
+									type="button"
+									onclick={addExcludePattern}
+									disabled={isCrawling || !excludeInput.trim()}
+									class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								>
+									Add
+								</button>
+							</div>
+							{#if configStore.excludePatterns.length > 0}
+								<div class="flex flex-wrap gap-1.5 mt-2">
+									{#each configStore.excludePatterns as pattern, index (pattern)}
+										<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-xs text-gray-700">
+											{pattern}
+											<button
+												type="button"
+												onclick={() => configStore.removeExcludePattern(index)}
+												disabled={isCrawling}
+												class="text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+												title="Remove pattern"
+											>
+												&times;
+											</button>
+										</span>
+									{/each}
+								</div>
+							{/if}
+						</div>
+
+						<!-- Include URLs -->
+						<div>
+							<label for="includeUrl" class="block text-sm font-medium text-gray-700 mb-1">
+								Include URLs
+							</label>
+							<div class="flex gap-2">
+								<input
+									type="text"
+									id="includeUrl"
+									bind:value={includeInput}
+									onkeydown={handleIncludeKeydown}
+									placeholder="https://..."
+									class="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+									disabled={isCrawling}
+								/>
+								<button
+									type="button"
+									onclick={addIncludeUrl}
+									disabled={isCrawling || !includeInput.trim()}
+									class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								>
+									Add
+								</button>
+							</div>
+							{#if configStore.includeUrls.length > 0}
+								<div class="flex flex-wrap gap-1.5 mt-2">
+									{#each configStore.includeUrls as url, index (url)}
+										<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-xs text-gray-700">
+											{url}
+											<button
+												type="button"
+												onclick={() => configStore.removeIncludeUrl(index)}
+												disabled={isCrawling}
+												class="text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+												title="Remove URL"
+											>
+												&times;
+											</button>
+										</span>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					</div>
+				{/if}
 			</div>
 
 			<!-- Error message -->

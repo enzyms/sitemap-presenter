@@ -10,12 +10,12 @@ export function normalizeUrl(url: string): string {
 }
 
 /**
- * Extract the hostname (domain) from a URL string.
+ * Extract the origin (protocol + host + port) from a URL string.
  */
 export function extractDomain(url: string): string {
 	try {
 		const normalized = normalizeUrl(url);
-		return new URL(normalized).hostname;
+		return new URL(normalized).origin;
 	} catch {
 		return url.replace(/^https?:\/\//, '').split('/')[0];
 	}

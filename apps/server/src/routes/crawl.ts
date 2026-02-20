@@ -28,10 +28,22 @@ router.post('/start', async (req: Request, res: Response) => {
 	const maxDepth = Math.min(Math.max(config.maxDepth || 3, 1), 5);
 	const maxPages = Math.min(Math.max(config.maxPages || 50, 10), 500);
 
+	const excludePatterns = Array.isArray(config.excludePatterns)
+		? config.excludePatterns.filter((p: unknown) => typeof p === 'string' && p.length > 0)
+		: [];
+	const includeUrls = Array.isArray(config.includeUrls)
+		? config.includeUrls.filter((u: unknown) => {
+			if (typeof u !== 'string') return false;
+			try { new URL(u); return true; } catch { return false; }
+		})
+		: [];
+
 	const session = sessionManager.createSession({
 		url: config.url,
 		maxDepth,
-		maxPages
+		maxPages,
+		...(excludePatterns.length > 0 && { excludePatterns }),
+		...(includeUrls.length > 0 && { includeUrls })
 	});
 
 	// Return session ID immediately

@@ -12,6 +12,8 @@ class ConfigStore {
 	maxPages = $state(defaultConfig.maxPages);
 	httpUser = $state('');
 	httpPassword = $state('');
+	excludePatterns = $state<string[]>([]);
+	includeUrls = $state<string[]>([]);
 
 	setUrl(url: string) {
 		this.url = url;
@@ -25,12 +27,34 @@ class ConfigStore {
 		this.maxPages = maxPages;
 	}
 
+	addExcludePattern(pattern: string) {
+		if (pattern && !this.excludePatterns.includes(pattern)) {
+			this.excludePatterns = [...this.excludePatterns, pattern];
+		}
+	}
+
+	removeExcludePattern(index: number) {
+		this.excludePatterns = this.excludePatterns.filter((_, i) => i !== index);
+	}
+
+	addIncludeUrl(url: string) {
+		if (url && !this.includeUrls.includes(url)) {
+			this.includeUrls = [...this.includeUrls, url];
+		}
+	}
+
+	removeIncludeUrl(index: number) {
+		this.includeUrls = this.includeUrls.filter((_, i) => i !== index);
+	}
+
 	reset() {
 		this.url = defaultConfig.url;
 		this.maxDepth = defaultConfig.maxDepth;
 		this.maxPages = defaultConfig.maxPages;
 		this.httpUser = '';
 		this.httpPassword = '';
+		this.excludePatterns = [];
+		this.includeUrls = [];
 	}
 
 	/** Get current config as a plain object (for API calls). */
@@ -43,6 +67,12 @@ class ConfigStore {
 		if (this.httpUser) {
 			config.httpUser = this.httpUser;
 			config.httpPassword = this.httpPassword;
+		}
+		if (this.excludePatterns.length > 0) {
+			config.excludePatterns = this.excludePatterns;
+		}
+		if (this.includeUrls.length > 0) {
+			config.includeUrls = this.includeUrls;
 		}
 		return config;
 	}

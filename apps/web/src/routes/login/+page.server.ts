@@ -29,8 +29,6 @@ export const actions: Actions = {
 			}
 		}
 
-		console.log('AUTH_PASSWORD from env:', JSON.stringify(env.AUTH_PASSWORD));
-		console.log('Password submitted:', JSON.stringify(password));
 		if (password !== env.AUTH_PASSWORD) {
 			return fail(403, { error: 'Wrong password.', email });
 		}
