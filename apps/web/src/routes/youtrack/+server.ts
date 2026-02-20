@@ -42,7 +42,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		// 3. Create issue in YouTrack
 		const baseUrl = ytConfig.baseUrl.replace(/\/+$/, '');
-		const createRes = await fetch(`${baseUrl}/api/issues`, {
+		const createRes = await fetch(`${baseUrl}/api/issues?fields=id,idReadable`, {
 			method: 'POST',
 			headers: {
 				Authorization: `Bearer ${ytConfig.token}`,
