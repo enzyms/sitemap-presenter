@@ -163,9 +163,10 @@
 						</button>
 					</div>
 
-					<p class="text-sm text-gray-500 mb-6">
+					<p class="text-sm text-gray-500 mb-2">
 						Once installed, visitors can click anywhere on your site to leave feedback markers.
 					</p>
+					<p class="text-xs text-gray-500 mb-6">Widget is hidden by default. Append <code class="bg-gray-100 px-1 rounded">?feedback=on</code> to any page URL to activate, or press <kbd class="bg-gray-100 px-1 rounded">Ctrl+Shift+F</kbd>. Once activated, it stays visible across pages.</p>
 
 					<div class="flex gap-3">
 						<button

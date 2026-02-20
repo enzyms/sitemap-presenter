@@ -379,6 +379,7 @@
 									</button>
 								</div>
 								<p class="text-xs text-gray-500 mt-2">Add this script tag to your website to enable the feedback widget</p>
+								<p class="text-xs text-gray-500 mt-1">Widget is hidden by default. Append <code class="bg-gray-100 px-1 rounded">?feedback=on</code> to any page URL to activate, or press <kbd class="bg-gray-100 px-1 rounded">Ctrl+Shift+F</kbd>. Once activated, it stays visible across pages.</p>
 							</div>
 
 							<!-- API Key (read-only) -->
