@@ -567,7 +567,6 @@
 				<FeedbackSidebar
 					markers={feedbackMarkers}
 					{highlightedMarkerId}
-					selectedMarkerId={pageViewerStore.highlightedMarkerId}
 					siteId={currentSiteId}
 					nodeId={sitemapStore.selectedNodeId}
 					{isYoutrackConfigured}
