@@ -5,7 +5,8 @@
   <img src="https://img.shields.io/badge/Tailwind-CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" />
   <img src="https://img.shields.io/badge/Supabase-Postgres-3FCF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/Playwright-Crawler-2EAD33?style=for-the-badge&logo=playwright&logoColor=white" alt="Playwright" />
-  <img src="https://img.shields.io/badge/Deploy-Netlify-00C7B7?style=for-the-badge&logo=netlify&logoColor=white" alt="Netlify" />
+  <img src="https://img.shields.io/badge/Frontend-Netlify-00C7B7?style=for-the-badge&logo=netlify&logoColor=white" alt="Netlify" />
+  <img src="https://img.shields.io/badge/Server-Fly.io-8B5CF6?style=for-the-badge&logo=fly.io&logoColor=white" alt="Fly.io" />
 </p>
 
 # Sitemap Presenter
@@ -96,7 +97,7 @@ Sitemap Presenter is a full-stack tool that crawls websites using a headless bro
 +-------------------+    Socket.io    +-------+--------+     Supabase     +------------------+
 |   Web Frontend    | <=============> |  Express API   | <=============>  |   Supabase DB    |
 |   (SvelteKit 2)   |                |  (Node.js)     |                  |   + Storage      |
-|                   |   REST API      |                |   Playwright     +------------------+
+|   Netlify         |   REST API      |  Fly.io (CDG)  |   Playwright     +------------------+
 |  - Dashboard      | <------------> |  - /api/crawl  |   Screenshots
 |  - Sitemap Canvas |                |  - /api/cancel |       |
 |  - Page Viewer    |                |  - /api/delete |       v
@@ -169,13 +170,12 @@ Sitemap Presenter's PageViewer receives update via postMessage
 
 - **Node.js** >= 18
 - **pnpm** >= 8
-- **Redis** (for Bull job queue on the server)
 - A **Supabase** project (free tier works)
 
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/your-org/sitemap-presenter.git
+git clone https://github.com/enzyms/sitemap-presenter.git
 cd sitemap-presenter
 pnpm install
 ```
@@ -423,7 +423,7 @@ A lightweight, zero-dependency (besides Supabase client) feedback widget that ca
 
 ```html
 <script
-  src="https://your-sitemap-presenter.netlify.app/widget.js"
+  src="https://sitemap-presenter.netlify.app/widget.js"
   data-api-key="your-site-api-key"
   async
 ></script>
@@ -436,6 +436,30 @@ Optional attributes:
 | `data-api-key` | *required* | Your site's API key from the dashboard |
 | `data-position` | `bottom-right` | Button position: `bottom-right`, `bottom-left`, `top-right`, `top-left` |
 | `data-color` | `#f97316` | Primary color (hex) for buttons and markers |
+
+### Activation
+
+The widget is **hidden by default** so it doesn't interfere with regular visitors. Three ways to activate it:
+
+| Method | How | Effect |
+|--------|-----|--------|
+| **URL parameter** | Append `?feedback=on` to any page URL | Activates and saves to localStorage |
+| **Keyboard shortcut** | `Ctrl+Shift+F` (or `Cmd+Shift+F` on Mac) | Toggles on/off |
+| **Deactivate** | `?feedback=off` or press shortcut again | Hides and saves to localStorage |
+
+Once activated, the choice is persisted in `localStorage` (`feedback-widget-active`) and the widget stays visible across page navigations and sessions. The `?feedback` parameter is automatically cleaned from the URL.
+
+### Allowing iframe embedding
+
+If your target site blocks iframes (for the sitemap page viewer), add these headers to the target site. For Netlify-hosted sites, add to `netlify.toml`:
+
+```toml
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "ALLOWALL"
+    Content-Security-Policy = "frame-ancestors 'self' https://sitemap-presenter.netlify.app"
+```
 
 ### How Markers Work
 
@@ -508,6 +532,7 @@ When the widget runs inside the Page Viewer iframe, it communicates via structur
 
 | Shortcut | Action |
 |----------|--------|
+| `Ctrl+Shift+F` / `Cmd+Shift+F` | Toggle widget visibility (works even when hidden) |
 | `Alt + F` | Toggle placement mode |
 | `Esc` | Cancel placement / close comments panel |
 
@@ -633,7 +658,7 @@ Multi-layer caching for fast loads and offline resilience:
 
 ### Netlify (Frontend)
 
-The project is configured for Netlify out of the box:
+The project is configured for Netlify out of the box. Deploys automatically on push to `main`.
 
 ```toml
 [build]
@@ -642,6 +667,7 @@ The project is configured for Netlify out of the box:
 
 [build.environment]
   NODE_VERSION = "20"
+  PUBLIC_SERVER_URL = "https://sitemap-presenter-server.fly.dev"
 ```
 
 **Build pipeline:**
@@ -651,12 +677,54 @@ The project is configured for Netlify out of the box:
 
 The widget is served at `/widget.js` with CORS headers (`Access-Control-Allow-Origin: *`) for cross-origin embedding.
 
-### Server (Backend)
+`PUBLIC_SERVER_URL` is set in `netlify.toml` so SvelteKit bakes the Fly.io server URL into the client build at compile time (via `$env/static/public`).
 
-The Express server needs separate hosting (Railway, Fly.io, Render, etc.) because it requires:
-- **Long-running processes** -- Playwright crawling can take minutes
-- **WebSocket support** -- Socket.io for live crawl updates
-- **Redis** -- Bull job queue backend
+### Fly.io (Crawl Server)
+
+The Express server runs on **Fly.io** because it needs Playwright (headless Chromium) for crawling and screenshots, plus persistent WebSocket connections -- things that don't work in serverless environments like Netlify Functions.
+
+**App:** `sitemap-presenter-server` | **Region:** `cdg` (Paris) | **URL:** `https://sitemap-presenter-server.fly.dev`
+
+**Configuration:** `apps/server/fly.toml` + `apps/server/Dockerfile`
+
+- 1 shared CPU, 1 GB RAM
+- Auto-stops when idle, auto-starts on incoming requests (cost-efficient)
+- Dockerfile installs Chromium for Playwright
+
+**Deploy:**
+
+```bash
+cd apps/server
+flyctl deploy
+```
+
+**Secrets** (set once via `flyctl secrets set`):
+
+```bash
+flyctl secrets set \
+  SUPABASE_URL=https://your-project.supabase.co \
+  SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+Get the service role key from Supabase dashboard > Settings > API.
+
+**Useful commands:**
+
+```bash
+flyctl status --config apps/server/fly.toml       # Check app status
+flyctl logs --config apps/server/fly.toml          # View logs
+flyctl ssh console --config apps/server/fly.toml   # SSH into container
+```
+
+### How Frontend Connects to Server
+
+In **development**, Vite proxies `/api/*` and `/socket.io` to `localhost:3002` (see `apps/web/vite.config.ts`).
+
+In **production**, `PUBLIC_SERVER_URL` is compiled into the frontend at build time:
+- API calls go to `https://sitemap-presenter-server.fly.dev/api/*`
+- Socket.io connects to `https://sitemap-presenter-server.fly.dev`
+
+If `PUBLIC_SERVER_URL` is empty (dev), both fall back to relative paths (proxied by Vite).
 
 ---
 
@@ -668,6 +736,7 @@ The Express server needs separate hosting (Railway, Fly.io, Render, etc.) becaus
 |----------|----------|-------------|
 | `PUBLIC_SUPABASE_URL` | Yes | Your Supabase project URL |
 | `PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public key |
+| `PUBLIC_SERVER_URL` | No | Crawl server URL (empty in dev, set in `netlify.toml` for prod) |
 | `DATABASE_URL` | No | PostgreSQL connection string (for direct DB access) |
 | `ALLOWED_EMAILS` | Yes | Comma-separated list of authorized emails |
 | `AUTH_PASSWORD` | Yes | Shared login password |
@@ -835,8 +904,8 @@ Persisted crawl results for instant sitemap restore without re-crawling.
 | Technology | Purpose |
 |------------|---------|
 | [Supabase](https://supabase.com) | PostgreSQL + Storage + Realtime |
-| [Redis](https://redis.io) | Job queue backend for Bull |
 | [Netlify](https://netlify.com) | Frontend hosting (adapter-netlify) |
+| [Fly.io](https://fly.io) | Crawl server hosting (Docker, CDG region) |
 | [pnpm](https://pnpm.io) | Fast, disk-efficient package manager |
 
 ---

@@ -47,7 +47,7 @@ When passing code with runes ($state, $derived, etc.) via the terminal, escape t
 - **Backend**: Express, Socket.io, Playwright, Cheerio, Bull/Redis
 - **Database**: Supabase
 - **Visualization**: @xyflow/svelte, dagre
-- **Deployment**: Netlify (adapter-netlify)
+- **Deployment**: Netlify (frontend), Fly.io (crawl server)
 
 ## Commands
 
