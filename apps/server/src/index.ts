@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3002;
 
 // Middleware
 app.use(cors({
-	origin: ['http://localhost:5173', 'http://localhost:4173'],
+	origin: ['http://localhost:5173', 'http://localhost:4173', 'https://sitemap-presenter.netlify.app'],
 	credentials: true
 }));
 app.use(express.json());

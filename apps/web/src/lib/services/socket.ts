@@ -1,5 +1,6 @@
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
+import { PUBLIC_SERVER_URL } from '$env/static/public';
 import { sitemapStore } from '$lib/stores/sitemap.svelte';
 import { projectsStore } from '$lib/stores/projects.svelte';
 import { screenshotCache } from '$lib/services/screenshotCache';
@@ -23,7 +24,7 @@ class SocketService {
 		}
 
 		this.sessionId = sessionId;
-		this.socket = io({
+		this.socket = io(PUBLIC_SERVER_URL || undefined, {
 			path: '/socket.io',
 			transports: ['websocket', 'polling']
 		});

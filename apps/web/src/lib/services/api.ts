@@ -1,6 +1,7 @@
 import type { CrawlConfig, StartCrawlResponse, CrawlStatusResponse, SitemapResponse } from '$lib/types';
+import { PUBLIC_SERVER_URL } from '$env/static/public';
 
-const API_BASE = '/api';
+const API_BASE = PUBLIC_SERVER_URL ? `${PUBLIC_SERVER_URL}/api` : '/api';
 
 async function parseErrorResponse(response: Response, fallback: string): Promise<never> {
 	try {

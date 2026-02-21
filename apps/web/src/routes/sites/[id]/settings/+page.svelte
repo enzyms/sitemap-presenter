@@ -363,11 +363,11 @@
 									Widget Embed Code
 								</label>
 								<div class="bg-gray-900 rounded-lg p-4 relative">
-									<pre class="text-sm text-green-400 overflow-x-auto whitespace-pre-wrap break-all"><code>&lt;script src="https://sitemap-presenter.netlify.app/widget.js" data-api-key="{site.api_key}"&gt;&lt;/script&gt;</code></pre>
+									<pre class="text-sm text-green-400 overflow-x-auto whitespace-pre-wrap break-all"><code>&lt;script src="https://sitemap-presenter.netlify.app/widget.js" data-api-key="{site.api_key}" async&gt;&lt;/script&gt;</code></pre>
 									<button
 										type="button"
 										onclick={() => {
-											const code = `<script src="https://sitemap-presenter.netlify.app/widget.js" data-api-key="${site?.api_key}"><\/script>`;
+											const code = `<script src="https://sitemap-presenter.netlify.app/widget.js" data-api-key="${site?.api_key}" async><\/script>`;
 											navigator.clipboard.writeText(code);
 										}}
 										class="absolute top-2 right-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm flex items-center gap-2 transition-colors"

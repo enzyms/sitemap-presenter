@@ -4,6 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  PUBLIC_SERVER_URL = "https://sitemap-presenter-server.fly.dev"
 
 # Serve the widget.js from /widget.js
 [[redirects]]

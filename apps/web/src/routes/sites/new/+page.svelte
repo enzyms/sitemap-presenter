@@ -44,7 +44,7 @@
 
 	function copyWidgetCode() {
 		if (!createdSite) return;
-		const code = `<script src="https://sitemap-presenter.netlify.app/widget.js" data-api-key="${createdSite.api_key}"><\/script>`;
+		const code = `<script src="https://sitemap-presenter.netlify.app/widget.js" data-api-key="${createdSite.api_key}" async><\/script>`;
 		navigator.clipboard.writeText(code);
 	}
 
@@ -151,7 +151,7 @@
 
 					<div class="bg-gray-900 rounded-lg p-4 mb-4 relative group">
 						<pre class="text-sm text-green-400 overflow-x-auto"><code>&lt;script src="https://sitemap-presenter.netlify.app/widget.js"
-  data-api-key="{createdSite.api_key}"&gt;&lt;/script&gt;</code></pre>
+  data-api-key="{createdSite.api_key}" async&gt;&lt;/script&gt;</code></pre>
 						<button
 							onclick={copyWidgetCode}
 							class="absolute top-2 right-2 p-2 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 hover:text-white transition-colors"
