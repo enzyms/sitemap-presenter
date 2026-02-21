@@ -95,9 +95,12 @@ function toggleWidget(): void {
   }
 }
 
+// Auto-activate when loaded inside an iframe (e.g. PageViewer)
+const isInIframe = window !== window.parent;
+
 // Main initialization
 function initializeWidget() {
-  if (checkActivationState()) {
+  if (isInIframe || checkActivationState()) {
     createAndAppendWidget();
   }
 }
