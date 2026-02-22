@@ -50,6 +50,12 @@ Sitemap Presenter is a full-stack tool that crawls websites using a headless bro
 - **HTTP Basic Auth support** -- Crawl password-protected staging sites
 - **Real-time progress** -- WebSocket-powered live updates as pages are discovered
 - **Automatic screenshots** -- Captures full-page thumbnails with Playwright + Sharp
+- **Smart crawl modes** -- Three modes selectable via radio cards in the toolbar:
+  - **Feedback only** -- Only visits pages with active feedback markers (~90% faster for review workflows)
+  - **Full crawl** -- Standard BFS crawl of all pages and links
+  - **Screenshots only** -- Retakes all screenshots without re-crawling links (reuses existing sitemap structure)
+- **Smart screenshot reuse** -- During recrawls, pages with unchanged titles and links skip Playwright entirely and reuse cached screenshot URLs
+- **Diff detection** -- After recrawl, compares against previous crawl cache to identify new, modified, and deleted pages
 
 ### Interactive Sitemap
 - **Node graph visualization** -- Built on [Svelte Flow](https://svelteflow.dev) (@xyflow/svelte)
@@ -112,7 +118,7 @@ Sitemap Presenter is a full-stack tool that crawls websites using a headless bro
 ### Data Flow: Crawling
 
 ```
-User clicks "Start Crawl"
+User selects crawl mode + clicks "Start Crawl"
         |
         v
 POST /api/crawl/start --> Server creates session, returns sessionId
@@ -120,22 +126,30 @@ POST /api/crawl/start --> Server creates session, returns sessionId
         v
 Web app connects Socket.io to sessionId room
         |
+        +-- [feedback-only] --> Query markers table for feedback URLs
+        |                       Visit only those pages (no BFS)
+        |
+        +-- [standard] ------> BFS crawl with Playwright (headless Chromium)
+        |
+        +-- [screenshot-only]-> Load URLs from site_crawl_cache
+        |                       Skip Phase 1, jump to screenshots
         v
-CrawlerService launches Playwright (headless Chromium)
+Phase 1 complete: emit "page:discovered" per page via WebSocket
         |
         v
-BFS crawl: discovers pages --> emits "page:discovered" via WebSocket
-        |                            |
-        v                            v
-After crawl: take screenshots    Web app builds node graph
-via Playwright + Sharp           in real-time
+Load previous crawl cache --> compare title + links per page
+        |                          |
+        +-- unchanged + has screenshot --> reuse cached URL (skip Playwright)
+        +-- changed or new -------------> take fresh screenshot
         |
         v
-Upload to Supabase Storage --> emit "page:screenshot" via WebSocket
-                                     |
-                                     v
-                              Web app updates thumbnails,
-                              caches to localStorage + Supabase
+Emit "crawl:diff" (new/modified/deleted pages) via WebSocket
+        |
+        v
+Upload screenshots to Supabase Storage --> emit "page:screenshot"
+        |
+        v
+Web app updates thumbnails + shows NEW/MODIFIED badges
 ```
 
 ### Data Flow: Feedback
@@ -301,7 +315,9 @@ sitemap-presenter/
 |           |-- routes/
 |           |   |-- crawl.ts          # POST /api/crawl/start, /cancel, /delete
 |           |-- services/
-|               |-- crawler.ts        # Playwright BFS crawler
+|               |-- crawler.ts        # Playwright BFS crawler + specific-URL crawl
+|               |-- crawlCache.ts     # Previous crawl comparison, diff detection, feedback URL loading
+|               |-- screenshot.ts     # Playwright screenshots + Sharp + Supabase Storage
 |               |-- supabaseClient.ts # Server-side Supabase (service role)
 |
 |-- packages/
@@ -360,10 +376,38 @@ The crawling engine is the heart of page discovery. It runs on the Express serve
 | `includeUrls` | -- | `[]` | Extra URLs to seed into the crawl queue |
 | `httpUser` | -- | -- | HTTP Basic Auth username |
 | `httpPassword` | -- | -- | HTTP Basic Auth password |
+| `siteId` | -- | -- | Supabase site ID (enables smart reuse + diff detection) |
+| `crawlMode` | -- | `feedback-only` | `standard`, `feedback-only`, or `screenshot-only` |
 
 ### Cancel Support
 
 Crawls can be cancelled mid-flight. The server checks a `shouldContinue()` callback on each iteration, and the client can call `POST /api/crawl/cancel` to abort.
+
+### Crawl Modes
+
+The toolbar features three radio cards for selecting the crawl strategy:
+
+| Mode | What it does | Best for |
+|------|-------------|----------|
+| **Feedback only** (default) | Queries the `markers` table for pages with active feedback, then only visits those URLs -- no BFS link discovery | Review workflows. ~90% faster on a 50-page site with 3 feedback pages |
+| **Full crawl** | Standard BFS crawl: visits all pages, follows internal links, takes fresh screenshots | Initial crawl or after major site restructuring |
+| **Screenshots only** | Skips Phase 1 entirely. Loads page URLs from `site_crawl_cache`, deletes existing screenshots, and retakes them all | After CSS/design changes where the sitemap structure hasn't changed |
+
+### Smart Screenshot Reuse
+
+During **full crawl** and **feedback-only** modes, the server compares each discovered page against the previous crawl stored in `site_crawl_cache`. If a page's **title** and **internal links** are unchanged and a **screenshot already exists** in Supabase Storage, the cached screenshot URL is reused -- Playwright is never launched for that page.
+
+This typically saves **60-80%** of recrawl time, since screenshots are the most expensive operation (~2-5s per page for navigate + capture + resize + upload).
+
+### Diff Detection
+
+After Phase 1 (crawling), the server diffs the current pages against the previous cache and emits a `crawl:diff` WebSocket event containing:
+
+- **New pages** -- URLs present now but not in the previous crawl
+- **Modified pages** -- URLs where the title or internal links changed
+- **Deleted pages** -- URLs in the previous cache that are no longer found
+
+The web app tags nodes with green "NEW" or orange "MODIFIED" badges, and shows deleted pages in a red banner in the config panel.
 
 ---
 
@@ -392,6 +436,10 @@ Each page is represented by a custom node containing:
   - **Orange glow** = has open markers
   - **Green glow** = all resolved
   - **Gray glow** = only archived
+- **Change status badges** -- After recrawl diff detection:
+  - **Green "NEW"** badge on newly discovered pages
+  - **Orange "MODIFIED"** badge on pages with changed title or links
+  - **Deleted pages** shown in a summary banner in the config panel
 - **Expand/collapse button** -- Toggle child node visibility
 - **Link counts** -- Internal and external link badges (visible at full zoom)
 
