@@ -5,7 +5,8 @@ import type {
 	PageScreenshotEvent,
 	CrawlProgressEvent,
 	CrawlCompleteEvent,
-	CrawlErrorEvent
+	CrawlErrorEvent,
+	CrawlDiffEvent
 } from '../types/index.js';
 
 class WebSocketHandler {
@@ -84,6 +85,10 @@ class WebSocketHandler {
 
 	emitCrawlError(sessionId: string, event: CrawlErrorEvent): void {
 		this.io?.to(sessionId).emit('crawl:error', event);
+	}
+
+	emitCrawlDiff(sessionId: string, event: CrawlDiffEvent): void {
+		this.io?.to(sessionId).emit('crawl:diff', event);
 	}
 
 	hasActiveClients(sessionId: string): boolean {

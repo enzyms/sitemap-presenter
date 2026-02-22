@@ -178,7 +178,9 @@
 		sitemapStore.reset();
 
 		try {
-			const response = await apiService.startCrawl(configStore.current);
+			const config = configStore.current;
+			if (siteId) config.siteId = siteId;
+			const response = await apiService.startCrawl(config);
 			sitemapStore.setSessionId(response.sessionId);
 			sitemapStore.setStatus('crawling');
 			socketService.connect(response.sessionId, siteId);
@@ -237,10 +239,10 @@
 		<!-- Unified Action Bar -->
 		<Panel position="top-center">
 			<div
-				class="flex items-center gap-2 bg-white/95 backdrop-blur rounded-lg shadow-lg p-2 border border-gray-200"
+				class="relative flex items-center gap-2 bg-white/95 backdrop-blur rounded-lg shadow-lg p-2 border border-gray-200"
 			>
 				<!-- Crawl Section -->
-				<div class="relative">
+				<div>
 					{#if isCrawling}
 						<button
 							class="px-3 py-1.5 rounded-md bg-red-100 hover:bg-red-200 text-red-700 text-sm font-medium transition-colors flex items-center gap-1.5"
@@ -266,11 +268,47 @@
 						</button>
 					{/if}
 
-					<!-- Crawl Settings Dropdown -->
-					{#if showCrawlSettings}
-						<div class="absolute top-full left-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
-							<div class="space-y-3">
-								<div>
+				</div>
+
+				<!-- Crawl Settings Dropdown (positioned relative to action bar) -->
+				{#if showCrawlSettings}
+					<div class="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
+						<div class="space-y-3">
+							<!-- Crawl Mode Radio Cards -->
+							<div class="grid grid-cols-3 gap-2">
+								<!-- svelte-ignore a11y_click_events_have_key_events -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="cursor-pointer rounded-lg border-2 p-2.5 text-center transition-all {configStore.crawlMode === 'feedback-only' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}"
+									onclick={() => configStore.crawlMode = 'feedback-only'}
+								>
+									<div class="text-lg mb-1">💬</div>
+									<div class="text-xs font-medium {configStore.crawlMode === 'feedback-only' ? 'text-orange-700' : 'text-gray-700'}">Feedback only</div>
+									<div class="text-[10px] text-gray-400 mt-0.5">Pages with markers</div>
+								</div>
+								<!-- svelte-ignore a11y_click_events_have_key_events -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="cursor-pointer rounded-lg border-2 p-2.5 text-center transition-all {configStore.crawlMode === 'standard' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}"
+									onclick={() => configStore.crawlMode = 'standard'}
+								>
+									<div class="text-lg mb-1">🌐</div>
+									<div class="text-xs font-medium {configStore.crawlMode === 'standard' ? 'text-orange-700' : 'text-gray-700'}">Full crawl</div>
+									<div class="text-[10px] text-gray-400 mt-0.5">All pages + links</div>
+								</div>
+								<!-- svelte-ignore a11y_click_events_have_key_events -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="cursor-pointer rounded-lg border-2 p-2.5 text-center transition-all {configStore.crawlMode === 'screenshot-only' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}"
+									onclick={() => configStore.crawlMode = 'screenshot-only'}
+								>
+									<div class="text-lg mb-1">📸</div>
+									<div class="text-xs font-medium {configStore.crawlMode === 'screenshot-only' ? 'text-orange-700' : 'text-gray-700'}">Screenshots</div>
+									<div class="text-[10px] text-gray-400 mt-0.5">Refresh visuals only</div>
+								</div>
+							</div>
+
+							<div>
 									<label class="block text-xs font-medium text-gray-600 mb-1">Website URL</label>
 									<input
 										type="url"
@@ -437,6 +475,7 @@
 													</div>
 												{/if}
 											</div>
+
 										</div>
 									{/if}
 								</div>
@@ -455,7 +494,6 @@
 							</div>
 						</div>
 					{/if}
-				</div>
 
 				<div class="w-px h-6 bg-gray-300"></div>
 

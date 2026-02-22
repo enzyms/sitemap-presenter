@@ -165,6 +165,12 @@
 				>
 					Depth: {data.depth}
 				</div>
+				<!-- Change status badge -->
+				{#if data.changeStatus}
+					<div class="absolute bottom-2 right-2 px-2 py-0.5 text-white text-xs font-bold rounded {data.changeStatus === 'new' ? 'bg-green-500' : 'bg-orange-500'}">
+						{data.changeStatus === 'new' ? 'NEW' : 'MODIFIED'}
+					</div>
+				{/if}
 			</div>
 			<div class="p-3 bg-white flex items-center justify-between gap-2">
 				<div class="min-w-0 flex-1">
@@ -236,6 +242,12 @@
 						{data.externalLinks.length} external
 					</span>
 				</div>
+				<!-- Change status badge -->
+				{#if data.changeStatus}
+					<div class="absolute bottom-2 right-2 px-2 py-0.5 text-white text-xs font-bold rounded {data.changeStatus === 'new' ? 'bg-green-500' : 'bg-orange-500'}">
+						{data.changeStatus === 'new' ? 'NEW' : 'MODIFIED'}
+					</div>
+				{/if}
 			</div>
 			<div class="p-3 bg-white flex items-center justify-between gap-2">
 				<div class="min-w-0 flex-1">

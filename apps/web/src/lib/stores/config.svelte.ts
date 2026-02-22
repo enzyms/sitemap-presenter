@@ -15,6 +15,7 @@ class ConfigStore {
 	httpPassword = $state('');
 	excludePatterns = $state<string[]>([]);
 	includeUrls = $state<string[]>([]);
+	crawlMode = $state<'standard' | 'feedback-only' | 'screenshot-only'>('feedback-only');
 
 	setUrl(url: string) {
 		this.url = url;
@@ -64,6 +65,7 @@ class ConfigStore {
 		this.httpPassword = '';
 		this.excludePatterns = [];
 		this.includeUrls = [];
+		this.crawlMode = 'feedback-only';
 	}
 
 	/** Get current config as a plain object (for API calls). */
@@ -82,6 +84,9 @@ class ConfigStore {
 		}
 		if (this.includeUrls.length > 0) {
 			config.includeUrls = this.includeUrls;
+		}
+		if (this.crawlMode !== 'standard') {
+			config.crawlMode = this.crawlMode;
 		}
 		return config;
 	}

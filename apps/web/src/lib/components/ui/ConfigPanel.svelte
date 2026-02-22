@@ -80,7 +80,9 @@
 		sitemapStore.reset();
 
 		try {
-			const response = await apiService.startCrawl(configStore.current);
+			const config = configStore.current;
+			if (siteId) config.siteId = siteId;
+			const response = await apiService.startCrawl(config);
 			sitemapStore.setSessionId(response.sessionId);
 			sitemapStore.setStatus('crawling');
 			socketService.connect(response.sessionId, siteId);
@@ -163,6 +165,32 @@
 		{/if}
 
 		<form onsubmit={handleSubmit} class="space-y-4">
+			<!-- Crawl Mode -->
+			<div>
+				<label for="crawlMode" class="block text-sm font-medium text-gray-700 mb-1">
+					Crawl mode
+				</label>
+				<select
+					id="crawlMode"
+					bind:value={configStore.crawlMode}
+					disabled={isCrawling}
+					class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+				>
+					<option value="feedback-only">Feedback pages only</option>
+					<option value="standard">Standard (full crawl)</option>
+					<option value="screenshot-only">Screenshots only (reuse sitemap)</option>
+				</select>
+				<p class="text-xs text-gray-400 mt-1">
+					{#if configStore.crawlMode === 'feedback-only'}
+						Only visits pages with active feedback markers
+					{:else if configStore.crawlMode === 'screenshot-only'}
+						Retakes all screenshots without re-crawling links
+					{:else}
+						Crawls all pages and takes fresh screenshots
+					{/if}
+				</p>
+			</div>
+
 			<!-- URL Input -->
 			<div>
 				<label for="url" class="block text-sm font-medium text-gray-700 mb-1">
@@ -335,6 +363,7 @@
 								</div>
 							{/if}
 						</div>
+
 					</div>
 				{/if}
 			</div>
@@ -389,5 +418,18 @@
 				{/if}
 			</div>
 		</form>
+
+		{#if sitemapStore.crawlDiff?.deletedPages.length}
+			<div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
+				<p class="text-sm font-medium text-red-700 mb-1">
+					{sitemapStore.crawlDiff.deletedPages.length} page{sitemapStore.crawlDiff.deletedPages.length > 1 ? 's' : ''} removed
+				</p>
+				<ul class="text-xs text-red-600 space-y-0.5 max-h-24 overflow-y-auto">
+					{#each sitemapStore.crawlDiff.deletedPages as url}
+						<li class="truncate">{url}</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 	</div>
 </div>

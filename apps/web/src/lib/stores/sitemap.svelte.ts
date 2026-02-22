@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import type { PageNode, LinkEdge, CrawlProgress, PageDiscoveredEvent, PageScreenshotEvent } from '$lib/types';
+import type { PageNode, LinkEdge, CrawlProgress, CrawlDiffEvent, PageDiscoveredEvent, PageScreenshotEvent } from '$lib/types';
 import { applyLayout, reorganizeByUrlHierarchy, type LayoutMode } from '$lib/services/layoutEngine';
 import { layoutPositions } from '$lib/services/layoutPositions';
 import type { Edge } from '@xyflow/svelte';
@@ -27,6 +27,9 @@ class SitemapStore {
 		(browser ? (localStorage.getItem(LAYOUT_MODE_STORAGE_KEY) as LayoutMode) : null) ||
 			'hierarchical'
 	);
+
+	// Crawl diff (new/modified/deleted pages after recrawl)
+	crawlDiff = $state<CrawlDiffEvent | null>(null);
 
 	// Layout lock/meta state
 	isLayoutLocked = $state(false);
@@ -225,6 +228,24 @@ class SitemapStore {
 			...this.progress,
 			screenshotted: this.progress.screenshotted + 1
 		};
+	}
+
+	applyCrawlDiff(diff: CrawlDiffEvent) {
+		this.crawlDiff = diff;
+
+		// Tag nodes with changeStatus for badge rendering
+		const newSet = new Set(diff.newPages);
+		const modifiedSet = new Set(diff.modifiedPages);
+
+		this.nodes = this.nodes.map((node) => {
+			if (newSet.has(node.data.url)) {
+				return { ...node, data: { ...node.data, changeStatus: 'new' as const } };
+			}
+			if (modifiedSet.has(node.data.url)) {
+				return { ...node, data: { ...node.data, changeStatus: 'modified' as const } };
+			}
+			return node;
+		});
 	}
 
 	layoutNodes() {
@@ -452,6 +473,7 @@ class SitemapStore {
 		this.progress = { ...defaultProgress };
 		this.selectedNodeId = null;
 		this.searchQuery = '';
+		this.crawlDiff = null;
 		this.urlToNodeId.clear();
 		this.manuallyPositioned.clear();
 		this.layoutMode = 'hierarchical';

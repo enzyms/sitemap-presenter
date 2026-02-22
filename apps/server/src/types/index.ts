@@ -6,6 +6,9 @@ export interface CrawlConfig {
 	httpPassword?: string;
 	excludePatterns?: string[];
 	includeUrls?: string[];
+	siteId?: string;
+	mode?: 'full' | 'smart';
+	crawlMode?: 'standard' | 'feedback-only' | 'screenshot-only';
 }
 
 export interface PageInfo {
@@ -66,6 +69,12 @@ export interface CrawlProgressEvent {
 export interface CrawlCompleteEvent {
 	totalPages: number;
 	duration: number;
+}
+
+export interface CrawlDiffEvent {
+	newPages: string[];
+	deletedPages: string[];
+	modifiedPages: string[];
 }
 
 export interface CrawlErrorEvent {

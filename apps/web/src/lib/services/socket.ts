@@ -10,7 +10,8 @@ import type {
 	PageScreenshotEvent,
 	CrawlProgressEvent,
 	CrawlCompleteEvent,
-	CrawlErrorEvent
+	CrawlErrorEvent,
+	CrawlDiffEvent
 } from '$lib/types';
 
 class SocketService {
@@ -84,6 +85,10 @@ class SocketService {
 			sitemapStore.updateProgress({
 				errors: sitemapStore.progress.errors + 1
 			});
+		});
+
+		this.socket.on('crawl:diff', (data: CrawlDiffEvent) => {
+			sitemapStore.applyCrawlDiff(data);
 		});
 	}
 

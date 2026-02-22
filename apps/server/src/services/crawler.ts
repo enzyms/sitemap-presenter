@@ -262,6 +262,66 @@ export class CrawlerService {
 		}
 	}
 
+	/**
+	 * Visit a fixed list of URLs without link discovery (no BFS).
+	 * Used for feedback-only crawls.
+	 */
+	async crawlSpecificUrls(
+		urls: string[],
+		config: CrawlConfig,
+		callbacks: CrawlCallbacks
+	): Promise<Map<string, PageInfo>> {
+		const pages = new Map<string, PageInfo>();
+
+		try {
+			this.baseUrl = new URL(config.url);
+		} catch {
+			callbacks.onError(config.url, 'Invalid URL');
+			return pages;
+		}
+
+		this.browser = await chromium.launch({
+			headless: true,
+			args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors']
+		});
+
+		const contextOptions: {
+			ignoreHTTPSErrors: boolean;
+			httpCredentials?: { username: string; password: string };
+		} = { ignoreHTTPSErrors: true };
+
+		if (config.httpUser) {
+			contextOptions.httpCredentials = {
+				username: config.httpUser,
+				password: config.httpPassword || ''
+			};
+		}
+
+		this.browserContext = await this.browser.newContext(contextOptions);
+
+		try {
+			for (const url of urls) {
+				if (!callbacks.shouldContinue()) break;
+
+				try {
+					const pageInfo = await this.fetchAndParse(url, 0, null);
+					if (pageInfo) {
+						pages.set(url, pageInfo);
+						callbacks.onPageDiscovered(pageInfo);
+					}
+					await this.delay(300);
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+					callbacks.onError(url, errorMessage);
+				}
+			}
+		} finally {
+			await this.closeBrowser();
+		}
+
+		return pages;
+	}
+
 	reset(): void {
 		this.visited.clear();
 		this.baseUrl = null;

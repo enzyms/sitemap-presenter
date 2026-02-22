@@ -23,6 +23,7 @@ export interface PageData extends Record<string, unknown> {
 	error?: string;
 	feedbackStats?: FeedbackStats;
 	isExpanded?: boolean; // Track if children are visible (default: true)
+	changeStatus?: 'new' | 'modified'; // Set after recrawl diff detection
 }
 
 export type PageNode = Node<PageData, 'page'>;
@@ -42,6 +43,9 @@ export interface CrawlConfig {
 	httpPassword?: string;
 	excludePatterns?: string[];
 	includeUrls?: string[];
+	siteId?: string;
+	mode?: 'full' | 'smart';
+	crawlMode?: 'standard' | 'feedback-only' | 'screenshot-only';
 }
 
 export interface CrawlProgress {
@@ -86,6 +90,12 @@ export interface CrawlProgressEvent {
 export interface CrawlCompleteEvent {
 	totalPages: number;
 	duration: number;
+}
+
+export interface CrawlDiffEvent {
+	newPages: string[];
+	deletedPages: string[];
+	modifiedPages: string[];
 }
 
 export interface CrawlErrorEvent {
