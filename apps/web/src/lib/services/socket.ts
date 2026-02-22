@@ -4,6 +4,7 @@ import { PUBLIC_SERVER_URL } from '$env/static/public';
 import { sitemapStore } from '$lib/stores/sitemap.svelte';
 import { projectsStore } from '$lib/stores/projects.svelte';
 import { screenshotCache } from '$lib/services/screenshotCache';
+import { crawlSessionService } from '$lib/services/crawlSession';
 import type {
 	PageDiscoveredEvent,
 	PageScreenshotEvent,
@@ -65,6 +66,7 @@ class SocketService {
 
 		this.socket.on('crawl:complete', (data: CrawlCompleteEvent) => {
 			sitemapStore.setStatus('complete');
+			if (this.currentSiteId) crawlSessionService.clear(this.currentSiteId);
 
 			// Apply URL path hierarchy to reorganize nodes/edges
 			sitemapStore.applyUrlHierarchy();

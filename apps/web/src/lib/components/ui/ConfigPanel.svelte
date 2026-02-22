@@ -4,6 +4,7 @@
 	import { projectsStore } from '$lib/stores/projects.svelte';
 	import { apiService } from '$lib/services/api';
 	import { socketService } from '$lib/services/socket';
+	import { crawlSessionService } from '$lib/services/crawlSession';
 
 	interface Props {
 		onClose?: () => void;
@@ -83,6 +84,7 @@
 			sitemapStore.setSessionId(response.sessionId);
 			sitemapStore.setStatus('crawling');
 			socketService.connect(response.sessionId, siteId);
+			if (siteId) crawlSessionService.save(siteId, response.sessionId);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to start crawl';
 			sitemapStore.setStatus('error');
@@ -97,6 +99,7 @@
 				await apiService.cancelCrawl(sitemapStore.progress.sessionId);
 				socketService.disconnect();
 				sitemapStore.setStatus('idle');
+				if (siteId) crawlSessionService.clear(siteId);
 			} catch (err) {
 				console.error('Failed to cancel crawl:', err);
 			}

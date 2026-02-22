@@ -38,6 +38,16 @@ router.post('/start', async (req: Request, res: Response) => {
 		})
 		: [];
 
+	// Deduplicate: join existing crawl if one is already running for this URL
+	const existingSession = sessionManager.findActiveByUrl(config.url);
+	if (existingSession) {
+		res.json({
+			sessionId: existingSession.id,
+			message: 'Joined existing crawl'
+		});
+		return;
+	}
+
 	const session = sessionManager.createSession({
 		url: config.url,
 		maxDepth,

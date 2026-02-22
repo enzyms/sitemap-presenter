@@ -27,6 +27,17 @@ class SessionManager {
 		return this.sessions.get(id);
 	}
 
+	findActiveByUrl(url: string): CrawlSession | undefined {
+		const normalized = url.replace(/\/+$/, '');
+		for (const session of this.sessions.values()) {
+			const sessionUrl = session.config.url.replace(/\/+$/, '');
+			if (sessionUrl === normalized && (session.status === 'crawling' || session.status === 'screenshotting')) {
+				return session;
+			}
+		}
+		return undefined;
+	}
+
 	addPage(sessionId: string, page: PageInfo): void {
 		const session = this.sessions.get(sessionId);
 		if (session) {

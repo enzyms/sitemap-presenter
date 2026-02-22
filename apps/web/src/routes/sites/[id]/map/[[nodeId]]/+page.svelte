@@ -13,6 +13,9 @@
 	import { screenshotCache } from '$lib/services/screenshotCache';
 	import { layoutPositions } from '$lib/services/layoutPositions';
 	import { crawlCacheService } from '$lib/services/crawlCacheService';
+	import { crawlSessionService } from '$lib/services/crawlSession';
+	import { apiService } from '$lib/services/api';
+	import { socketService } from '$lib/services/socket';
 	import type { PageNode, FeedbackStats } from '$lib/types';
 
 	let siteId = $derived(page.params.id!);
@@ -56,7 +59,10 @@
 			await feedbackStore.initializeBySiteId(siteId);
 
 			// Load cached sitemap data
-			loadCachedSitemap();
+			await loadCachedSitemap();
+
+			// Reconnect to an active crawl if one was running before page reload
+			await attemptCrawlReconnection();
 		} catch (e) {
 			console.error('Failed to load site:', e);
 			error = e instanceof Error ? e.message : 'Failed to load site';
@@ -102,6 +108,57 @@
 			}
 		} catch (e) {
 			console.error('Failed to load cached sitemap:', e);
+		}
+	}
+
+	// Reconnect to an active crawl session after page reload
+	async function attemptCrawlReconnection() {
+		const sessionId = crawlSessionService.load(siteId);
+		if (!sessionId) return;
+
+		try {
+			const resp = await apiService.getCrawlStatus(sessionId);
+
+			// The backend response has session.status at top-level and
+			// session.progress as { found, crawled, screenshotted } — which
+			// differs from the frontend CrawlSession type. Cast to access
+			// the actual shape.
+			const session = resp.session as Record<string, any>;
+			const status: string = session.status ?? session.progress?.status;
+
+			if (status === 'complete') {
+				// Crawl finished while we were away — fetch the final sitemap
+				const sitemap = await apiService.getSitemap(sessionId);
+				if (sitemap.nodes?.length > 0) {
+					sitemapStore.loadFromCache(sitemap.nodes, sitemap.edges);
+					sitemapStore.applyUrlHierarchy();
+				}
+				crawlSessionService.clear(siteId);
+			} else if (status === 'crawling' || status === 'screenshotting') {
+				// Still running — load current snapshot and reconnect socket
+				const sitemap = await apiService.getSitemap(sessionId);
+				if (sitemap.nodes?.length > 0) {
+					sitemapStore.loadFromCache(sitemap.nodes, sitemap.edges);
+				}
+
+				const progress = session.progress ?? {};
+				sitemapStore.setSessionId(sessionId);
+				sitemapStore.setStatus(status as 'crawling' | 'screenshotting');
+				sitemapStore.updateProgress({
+					found: progress.found ?? 0,
+					crawled: progress.crawled ?? 0,
+					screenshotted: progress.screenshotted ?? 0,
+					errors: session.errorCount ?? 0
+				});
+
+				socketService.connect(sessionId, siteId);
+			} else {
+				// Terminal states: 'error', 'cancelled', or unknown
+				crawlSessionService.clear(siteId);
+			}
+		} catch {
+			// Server unreachable or session gone (404) — clear stale session
+			crawlSessionService.clear(siteId);
 		}
 	}
 
@@ -277,6 +334,7 @@
 
 		return () => {
 			window.removeEventListener('beforeunload', handleBeforeUnload);
+			socketService.disconnect();
 			layoutPositions.flushPendingSave();
 			crawlCacheService.flushPendingSave();
 			feedbackStore.destroy();

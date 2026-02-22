@@ -21,6 +21,7 @@
 	import { configStore } from '$lib/stores/config.svelte';
 	import { apiService } from '$lib/services/api';
 	import { socketService } from '$lib/services/socket';
+	import { crawlSessionService } from '$lib/services/crawlSession';
 
 	interface Props {
 		siteId?: string;
@@ -181,6 +182,7 @@
 			sitemapStore.setSessionId(response.sessionId);
 			sitemapStore.setStatus('crawling');
 			socketService.connect(response.sessionId, siteId);
+			if (siteId) crawlSessionService.save(siteId, response.sessionId);
 			showCrawlSettings = false;
 		} catch (err) {
 			crawlError = err instanceof Error ? err.message : 'Failed to start crawl';
@@ -196,6 +198,7 @@
 				await apiService.cancelCrawl(sitemapStore.progress.sessionId);
 				socketService.disconnect();
 				sitemapStore.setStatus('idle');
+				if (siteId) crawlSessionService.clear(siteId);
 			} catch (err) {
 				console.error('Failed to cancel crawl:', err);
 			}
