@@ -237,6 +237,7 @@ export class FeedbackWidget extends HTMLElement {
       </svg>
       <span>Feedback</span>
       <span class="count" style="display: none">0</span>
+      <span class="count count-secondary" style="display: none">0</span>
     `;
     this.mainButton.addEventListener('click', () => this.togglePlacementMode());
 
@@ -361,6 +362,24 @@ export class FeedbackWidget extends HTMLElement {
       countEl.style.display = 'inline';
     } else {
       countEl.style.display = 'none';
+    }
+
+    // Secondary badge: resolved count (active view) or archived count (archived view)
+    const secondaryEl = this.mainButton.querySelector('.count-secondary') as HTMLElement;
+    if (!secondaryEl) return;
+
+    const secondaryStatus = effectiveViewFilter === 'archived' ? 'archived' : 'resolved';
+    const secondaryCount = this.markers.filter(m => {
+      if (m.status !== secondaryStatus) return false;
+      if (!this.isInIframe && this.personFilter === 'mine' && m.author_id !== currentUserId) return false;
+      return true;
+    }).length;
+
+    if (secondaryCount > 0) {
+      secondaryEl.textContent = String(secondaryCount);
+      secondaryEl.style.display = 'inline';
+    } else {
+      secondaryEl.style.display = 'none';
     }
   }
 
