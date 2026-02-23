@@ -50,8 +50,8 @@ export const widgetStyles = `
   .feedback-button-main {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
+    gap: 6px;
+    padding: 12px 12px 12px 16px;
     background: var(--primary-color);
     color: white;
     border: none;
@@ -95,7 +95,7 @@ export const widgetStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 12px;
+    padding: 0 16px 0 8px;
     background: var(--primary-color);
     color: white;
     border: none;
@@ -153,6 +153,8 @@ export const widgetStyles = `
     padding: 2px 8px;
     border-radius: 12px;
     font-size: 12px;
+    position: relative;
+    left: 2px;
   }
 
   /* Position variants */
