@@ -90,7 +90,7 @@ export const crawlCacheService = {
 				.from('site_crawl_cache')
 				.select('nodes, edges')
 				.eq('site_id', siteId)
-				.single();
+				.maybeSingle();
 
 			if (!error && data?.nodes && data?.edges) {
 				const crawlData: CrawlData = {
