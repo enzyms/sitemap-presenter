@@ -49,6 +49,12 @@ When passing code with runes ($state, $derived, etc.) via the terminal, escape t
 - **Visualization**: @xyflow/svelte, dagre
 - **Deployment**: Netlify (frontend), Fly.io (crawl server)
 
+## Conventions
+
+### Supabase queries
+- **Always use `.maybeSingle()`** instead of `.single()` for queries that may return 0 rows (cache lookups, optional settings, etc.). `.single()` throws a 406 error when no row matches.
+- Only use `.single()` when querying by primary key where the row is guaranteed to exist (e.g., after an insert with `.select()`).
+
 ## Commands
 
 - `pnpm install` - Install dependencies
