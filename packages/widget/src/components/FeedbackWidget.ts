@@ -497,6 +497,13 @@ export class FeedbackWidget extends HTMLElement {
     this.closeMenu();
     this.closeCommentsPanel();
 
+    // Switch back to active view so the new marker will be visible
+    if (this.viewFilter === 'archived') {
+      this.viewFilter = 'active';
+      this.updateMarkerVisibility();
+      this.updateButtonCount();
+    }
+
     if (this.floatingButton) {
       this.floatingButton.classList.add('active');
     }
