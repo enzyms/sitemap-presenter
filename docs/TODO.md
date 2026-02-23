@@ -7,7 +7,7 @@ Crawling:
 
 
 1. youtrack settings not set for other admin users
-2. Improve second view (feedback list view, link to detail node, filters)
+2. ~~Improve second view (feedback list view, link to detail node, filters)~~ DONE — feedbacks page with inline comments, kebab menu, "View on map" link, status filters
 3. hints to pan and zoom the map
 4. crawling: add checmark to crawl children recursively
 

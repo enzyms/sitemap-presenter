@@ -13,7 +13,7 @@
 		const path = $page.url.pathname;
 		if (path === '/') return 'home';
 		if (path.includes('/map')) return 'map';
-		if (path.includes('/feedback')) return 'feedback';
+		if (path.includes('/feedbacks')) return 'feedback';
 		if (path.includes('/settings')) return 'settings';
 		return 'sites';
 	});
@@ -24,9 +24,10 @@
 	<!-- Left: Logo + Site name -->
 	<div class="flex items-center gap-4 flex-1">
 		<a href="/" class="flex items-center gap-2 hover:opacity-80 transition-opacity">
-			<div class="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
+			<div class="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
 				<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
 				</svg>
 			</div>
 			<span class="text-lg font-bold text-gray-800">Sitemap Presenter</span>
@@ -62,7 +63,7 @@
 				</span>
 			</a>
 			<a
-				href="/sites/{siteId}/feedback"
+				href="/sites/{siteId}/feedbacks"
 				class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors"
 				class:bg-white={currentSection === 'feedback'}
 				class:text-orange-600={currentSection === 'feedback'}

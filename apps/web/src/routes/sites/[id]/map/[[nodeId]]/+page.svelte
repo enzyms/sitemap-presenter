@@ -24,6 +24,7 @@
 	let error = $state<string | null>(null);
 	let initialNodeId = page.params.nodeId ?? null;
 	let initialMarkerId = page.url.searchParams.get('marker');
+	let initialPagePath = page.url.searchParams.get('page');
 	let initialView = page.url.searchParams.get('view');
 
 	let routerReady = $state(false);
@@ -287,6 +288,37 @@
 					markerId
 				);
 				// Set highlighted marker immediately so URL sync preserves ?marker=
+				if (markerId) {
+					pageViewerStore.highlightedMarkerId = markerId;
+				}
+			}
+		}
+	});
+
+	// Fallback: open viewer from page path (used by feedbacks "Show on site")
+	$effect(() => {
+		if (sitemapStore.nodes.length > 0 && !initialNodeId && initialPagePath) {
+			const pagePath = initialPagePath;
+			const markerId = initialMarkerId;
+			initialPagePath = null;
+			initialMarkerId = null;
+
+			const node = sitemapStore.nodes.find((n) => {
+				try {
+					return new URL(n.data.url).pathname === pagePath;
+				} catch {
+					return false;
+				}
+			});
+			if (node) {
+				sitemapStore.selectNode(node.id);
+				pageViewerStore.openViewer(
+					node.data.url,
+					node.data.title,
+					node.data.thumbnailUrl || null,
+					node.id,
+					markerId
+				);
 				if (markerId) {
 					pageViewerStore.highlightedMarkerId = markerId;
 				}
