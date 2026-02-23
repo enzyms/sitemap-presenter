@@ -44,11 +44,27 @@ export class FeedbackWidget extends HTMLElement {
   private isInIframe = false;
   private parentOrigin: string | null = null;
 
+  // User identity
+  private userName: string | null = null;
+
+  // Widget-local filters
+  private viewFilter: 'active' | 'archived' = 'active';
+  private personFilter: 'all' | 'mine' = 'all';
+
+  // Flyout menu state
+  private isMenuOpen = false;
+  private flyoutMenu: HTMLDivElement | null = null;
+  private menuOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
+
   // DOM references
   private container: HTMLDivElement | null = null;
   private markersContainer: HTMLDivElement | null = null;
   private commentsPanel: CommentsPanel | null = null;
   private floatingButton: HTMLButtonElement | null = null;
+  private buttonGroup: HTMLDivElement | null = null;
+  private mainButton: HTMLButtonElement | null = null;
+  private menuButton: HTMLButtonElement | null = null;
+  private onboardingOverlay: HTMLDivElement | null = null;
   private placementCursor: HTMLDivElement | null = null;
   private highlightOverlay: HTMLDivElement | null = null;
   private cancelButton: HTMLButtonElement | null = null;
@@ -142,6 +158,14 @@ export class FeedbackWidget extends HTMLElement {
       this.container.style.setProperty('--primary-color', this.config.primaryColor);
     }
 
+    // Load saved user name
+    try {
+      this.userName = localStorage.getItem('feedback-widget-user-name');
+    } catch { /* localStorage might not be available */ }
+    if (this.userName && this.api) {
+      this.api.setDefaultName(this.userName);
+    }
+
     // Create UI elements
     this.createFloatingButton();
     this.createMarkersContainer();
@@ -152,6 +176,15 @@ export class FeedbackWidget extends HTMLElement {
 
     // Subscribe to realtime updates
     this.subscribeToUpdates();
+
+    // Show onboarding for non-iframe visitors who haven't seen it
+    if (!this.isInIframe) {
+      try {
+        if (!localStorage.getItem('feedback-widget-onboarding-done')) {
+          this.showOnboarding();
+        }
+      } catch { /* localStorage might not be available */ }
+    }
 
     // Update marker positions on scroll/resize
     window.addEventListener('scroll', this.handleScroll.bind(this), { passive: true });
@@ -191,18 +224,41 @@ export class FeedbackWidget extends HTMLElement {
   private createFloatingButton() {
     if (!this.container || !this.config) return;
 
-    this.floatingButton = document.createElement('button');
-    this.floatingButton.className = `feedback-button position-${this.config.position}`;
-    this.floatingButton.innerHTML = `
+    // Split button group
+    this.buttonGroup = document.createElement('div');
+    this.buttonGroup.className = `feedback-button-group position-${this.config.position}`;
+
+    // Main button (placement mode toggle)
+    this.mainButton = document.createElement('button');
+    this.mainButton.className = 'feedback-button-main';
+    this.mainButton.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
       </svg>
       <span>Feedback</span>
       <span class="count" style="display: none">0</span>
     `;
+    this.mainButton.addEventListener('click', () => this.togglePlacementMode());
 
-    this.floatingButton.addEventListener('click', () => this.togglePlacementMode());
-    this.container.appendChild(this.floatingButton);
+    // Menu button (hamburger)
+    this.menuButton = document.createElement('button');
+    this.menuButton.className = 'feedback-button-menu';
+    this.menuButton.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    `;
+    this.menuButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleMenu();
+    });
+
+    this.buttonGroup.appendChild(this.mainButton);
+    this.buttonGroup.appendChild(this.menuButton);
+    this.container.appendChild(this.buttonGroup);
+
+    // Backward compat — floatingButton points to mainButton for count badge / active class
+    this.floatingButton = this.mainButton;
   }
 
   private createMarkersContainer() {
@@ -283,10 +339,22 @@ export class FeedbackWidget extends HTMLElement {
   }
 
   private updateButtonCount() {
-    if (!this.floatingButton) return;
+    if (!this.mainButton) return;
 
-    const countEl = this.floatingButton.querySelector('.count') as HTMLElement;
-    const openCount = this.markers.filter(m => m.status === 'open').length;
+    const countEl = this.mainButton.querySelector('.count') as HTMLElement;
+    if (!countEl) return;
+
+    const currentUserId = this.api?.getUserId() ?? null;
+    const effectiveViewFilter = this.isInIframe ? this.statusFilter : this.viewFilter;
+
+    const openCount = this.markers.filter(m => {
+      if (m.status !== 'open') return false;
+      // View filter: if showing archived only, no open markers count
+      if (effectiveViewFilter === 'archived') return false;
+      // Person filter
+      if (!this.isInIframe && this.personFilter === 'mine' && m.author_id !== currentUserId) return false;
+      return true;
+    }).length;
 
     if (openCount > 0) {
       countEl.textContent = String(openCount);
@@ -405,6 +473,7 @@ export class FeedbackWidget extends HTMLElement {
 
   private enterPlacementMode() {
     this.isPlacementMode = true;
+    this.closeMenu();
     this.closeCommentsPanel();
 
     if (this.floatingButton) {
@@ -512,9 +581,15 @@ export class FeedbackWidget extends HTMLElement {
       return;
     }
 
-    // Esc → close comments panel (placement mode Esc is handled by handlePlacementKeyDown)
-    if (e.key === 'Escape' && !this.isPlacementMode && this.commentsPanel) {
-      this.closeCommentsPanel();
+    // Esc → close flyout menu, then comments panel
+    if (e.key === 'Escape' && !this.isPlacementMode) {
+      if (this.isMenuOpen) {
+        this.closeMenu();
+        return;
+      }
+      if (this.commentsPanel) {
+        this.closeCommentsPanel();
+      }
     }
   };
 
@@ -599,6 +674,7 @@ export class FeedbackWidget extends HTMLElement {
       fallback_position,
       viewport,
       status: 'open' as MarkerStatus,
+      youtrack_issue_id: null,
       created_at: now,
       updated_at: now,
       comments: []
@@ -767,7 +843,7 @@ export class FeedbackWidget extends HTMLElement {
           const pending = this.pendingMarkerIds.get(markerId);
           if (pending) realId = await pending.promise;
 
-          const comment = await this.api.createComment({ marker_id: realId, content });
+          const comment = await this.api.createComment({ marker_id: realId, content, author_name: this.userName || undefined });
           // Add comment locally (use realId — markers array already swapped)
           this.markers = this.markers.map(m => {
             if (m.id === realId) {
@@ -1110,6 +1186,209 @@ export class FeedbackWidget extends HTMLElement {
   }
 
   // ============================================================
+  // Onboarding
+  // ============================================================
+
+  private showOnboarding(prefill?: string) {
+    if (!this.container) return;
+
+    this.onboardingOverlay = document.createElement('div');
+    this.onboardingOverlay.className = 'onboarding-overlay';
+    this.onboardingOverlay.innerHTML = `
+      <div class="onboarding-card">
+        <h2>Leave feedback</h2>
+        <p>Click anywhere on the page to drop a pin and leave a comment.</p>
+        <input class="onboarding-input" type="text" placeholder="Your name or nickname" maxlength="50" />
+        <div class="onboarding-actions">
+          <button class="onboarding-submit">Get started</button>
+          <button class="onboarding-skip">Skip</button>
+        </div>
+      </div>
+    `;
+
+    const input = this.onboardingOverlay.querySelector('.onboarding-input') as HTMLInputElement;
+    if (prefill) input.value = prefill;
+
+    const submit = this.onboardingOverlay.querySelector('.onboarding-submit') as HTMLButtonElement;
+    const skip = this.onboardingOverlay.querySelector('.onboarding-skip') as HTMLButtonElement;
+
+    submit.addEventListener('click', () => this.completeOnboarding(input.value.trim()));
+    skip.addEventListener('click', () => this.completeOnboarding(null));
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.completeOnboarding(input.value.trim());
+      if (e.key === 'Escape') this.completeOnboarding(null);
+    });
+
+    // Click on overlay background dismisses
+    this.onboardingOverlay.addEventListener('click', (e) => {
+      if (e.target === this.onboardingOverlay) this.completeOnboarding(null);
+    });
+
+    this.container.appendChild(this.onboardingOverlay);
+    requestAnimationFrame(() => input.focus());
+  }
+
+  private completeOnboarding(name: string | null) {
+    // Save name if provided
+    if (name) {
+      this.userName = name;
+      try { localStorage.setItem('feedback-widget-user-name', name); } catch {}
+      if (this.api) {
+        this.api.setDefaultName(name);
+        this.api.updateUserName(name);
+      }
+    }
+
+    // Mark onboarding as done
+    try { localStorage.setItem('feedback-widget-onboarding-done', 'true'); } catch {}
+
+    // Remove overlay
+    if (this.onboardingOverlay) {
+      this.onboardingOverlay.remove();
+      this.onboardingOverlay = null;
+    }
+  }
+
+  // ============================================================
+  // Flyout Menu
+  // ============================================================
+
+  private toggleMenu() {
+    if (this.isMenuOpen) {
+      this.closeMenu();
+    } else {
+      this.openMenu();
+    }
+  }
+
+  private openMenu() {
+    if (!this.container || !this.buttonGroup) return;
+
+    this.closeCommentsPanel();
+    this.isMenuOpen = true;
+
+    // Build menu
+    this.flyoutMenu = document.createElement('div');
+    this.flyoutMenu.className = 'flyout-menu';
+    this.flyoutMenu.innerHTML = this.buildMenuHTML();
+    this.container.appendChild(this.flyoutMenu);
+
+    // Position relative to button group
+    this.positionMenu();
+
+    // Attach item listeners
+    this.attachMenuEventListeners();
+
+    // Close on outside click (deferred so opening click doesn't trigger it)
+    requestAnimationFrame(() => {
+      this.menuOutsideClickHandler = (e: MouseEvent) => {
+        const path = e.composedPath();
+        const isInsideMenu = this.flyoutMenu && path.includes(this.flyoutMenu);
+        const isInsideMenuBtn = this.menuButton && path.includes(this.menuButton);
+        if (!isInsideMenu && !isInsideMenuBtn) {
+          this.closeMenu();
+        }
+      };
+      document.addEventListener('mousedown', this.menuOutsideClickHandler, true);
+    });
+  }
+
+  private closeMenu() {
+    this.isMenuOpen = false;
+
+    if (this.menuOutsideClickHandler) {
+      document.removeEventListener('mousedown', this.menuOutsideClickHandler, true);
+      this.menuOutsideClickHandler = null;
+    }
+
+    if (this.flyoutMenu) {
+      this.flyoutMenu.remove();
+      this.flyoutMenu = null;
+    }
+  }
+
+  private positionMenu() {
+    if (!this.flyoutMenu || !this.buttonGroup) return;
+
+    const btnRect = this.buttonGroup.getBoundingClientRect();
+    const position = this.config?.position || 'bottom-right';
+    const isTop = position.startsWith('top');
+
+    if (isTop) {
+      // Menu opens below
+      this.flyoutMenu.style.top = `${btnRect.bottom + 8}px`;
+    } else {
+      // Menu opens above
+      this.flyoutMenu.style.bottom = `${window.innerHeight - btnRect.top + 8}px`;
+    }
+
+    if (position.endsWith('right')) {
+      this.flyoutMenu.style.right = `${window.innerWidth - btnRect.right}px`;
+    } else {
+      this.flyoutMenu.style.left = `${btnRect.left}px`;
+    }
+  }
+
+  private buildMenuHTML(): string {
+    const viewCheck = (value: string) => this.viewFilter === value ? '✓' : '';
+    const personCheck = (value: string) => this.personFilter === value ? '✓' : '';
+    const displayName = this.userName || 'Anonymous';
+
+    return `
+      <div class="flyout-section-label">View</div>
+      <button class="flyout-item" data-action="view" data-value="active">
+        <span class="check">${viewCheck('active')}</span> Feedbacks
+      </button>
+      <button class="flyout-item" data-action="view" data-value="archived">
+        <span class="check">${viewCheck('archived')}</span> Archives
+      </button>
+      <div class="flyout-divider"></div>
+      <div class="flyout-section-label">Show</div>
+      <button class="flyout-item" data-action="person" data-value="all">
+        <span class="check">${personCheck('all')}</span> Everyone's markers
+      </button>
+      <button class="flyout-item" data-action="person" data-value="mine">
+        <span class="check">${personCheck('mine')}</span> My markers only
+      </button>
+      <div class="flyout-divider"></div>
+      <button class="flyout-item" data-action="change-name">
+        <span class="check"></span> Change name
+      </button>
+      <div class="flyout-user">
+        <span class="flyout-user-icon">👤</span> ${displayName}
+      </div>
+    `;
+  }
+
+  private attachMenuEventListeners() {
+    if (!this.flyoutMenu) return;
+
+    this.flyoutMenu.querySelectorAll('.flyout-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        const btn = (e.currentTarget as HTMLElement);
+        const action = btn.dataset.action;
+        const value = btn.dataset.value;
+
+        if (action === 'view' && (value === 'active' || value === 'archived')) {
+          this.viewFilter = value;
+          this.updateMarkerVisibility();
+          this.updateButtonCount();
+          this.closeMenu();
+        } else if (action === 'person' && (value === 'all' || value === 'mine')) {
+          this.personFilter = value;
+          this.updateMarkerVisibility();
+          this.updateButtonCount();
+          this.closeMenu();
+        } else if (action === 'change-name') {
+          this.closeMenu();
+          this.showOnboarding(this.userName || '');
+        }
+      });
+    });
+  }
+
+  // ============================================================
   // Scroll/Resize handlers
   // ============================================================
 
@@ -1137,16 +1416,32 @@ export class FeedbackWidget extends HTMLElement {
   }
 
   private updateMarkerVisibility() {
+    const currentUserId = this.api?.getUserId() ?? null;
+
     for (const bubble of this.markerBubbles) {
       const markerId = bubble.getMarkerId();
       const marker = markerId ? this.markers.find(m => m.id === markerId) : null;
 
-      // Hide if status doesn't match filter
-      if (marker && this.statusFilter !== 'all') {
-        const hidden =
-          this.statusFilter === 'active'
-            ? marker.status === 'archived'
-            : marker.status !== this.statusFilter;
+      if (marker) {
+        // Determine effective view filter: parent statusFilter takes precedence in iframe mode
+        const effectiveViewFilter = this.isInIframe ? this.statusFilter : this.viewFilter;
+
+        // View / status filter
+        let hidden = false;
+        if (effectiveViewFilter !== 'all') {
+          hidden =
+            effectiveViewFilter === 'active'
+              ? marker.status === 'archived'
+              : effectiveViewFilter === 'archived'
+                ? marker.status !== 'archived'
+                : marker.status !== effectiveViewFilter;
+        }
+
+        // Person filter (only in non-iframe mode)
+        if (!hidden && !this.isInIframe && this.personFilter === 'mine') {
+          hidden = marker.author_id !== currentUserId;
+        }
+
         if (hidden) {
           bubble.element.style.display = 'none';
           continue;
@@ -1173,6 +1468,8 @@ export class FeedbackWidget extends HTMLElement {
       this.outsideClickHandler = null;
     }
 
+    this.closeMenu();
+
     if (this.isRepositioning) {
       this.exitRepositionMode();
     }
@@ -1187,6 +1484,11 @@ export class FeedbackWidget extends HTMLElement {
     this.markersContainer = null;
     this.highlightOverlay = null;
     this.markerBubbles = [];
+    this.buttonGroup = null;
+    this.mainButton = null;
+    this.menuButton = null;
+    this.flyoutMenu = null;
+    this.onboardingOverlay = null;
 
     if (this.commentsPanel) {
       this.commentsPanel = null;

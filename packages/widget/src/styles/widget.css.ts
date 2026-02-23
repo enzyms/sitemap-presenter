@@ -35,7 +35,76 @@ export const widgetStyles = `
     color: var(--gray-800);
   }
 
-  /* Floating button */
+  /* Split button group */
+  .feedback-button-group {
+    position: fixed;
+    z-index: 999998;
+    display: flex;
+    align-items: stretch;
+    border-radius: 24px;
+    box-shadow: var(--shadow-lg);
+    pointer-events: auto;
+    overflow: hidden;
+  }
+
+  .feedback-button-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .feedback-button-main:hover {
+    background: var(--primary-hover);
+  }
+
+  .feedback-button-main.active {
+    background: var(--gray-800);
+  }
+
+  .feedback-button-main svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .feedback-button-main .count {
+    background: white;
+    color: var(--primary-color);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+  }
+
+  .feedback-button-menu {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .feedback-button-menu:hover {
+    background: var(--primary-hover);
+  }
+
+  .feedback-button-menu svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Floating button (kept for backward compat in iframe mode) */
   .feedback-button {
     position: fixed;
     z-index: 999998;
@@ -82,6 +151,171 @@ export const widgetStyles = `
   .position-bottom-left { bottom: 24px; left: 24px; }
   .position-top-right { top: 24px; right: 24px; }
   .position-top-left { top: 24px; left: 24px; }
+
+  /* Flyout menu */
+  .flyout-menu {
+    position: fixed;
+    z-index: 999999;
+    width: 220px;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    box-shadow: var(--shadow-xl);
+    overflow: hidden;
+    pointer-events: auto;
+    animation: panelFadeIn 0.15s ease both;
+  }
+
+  .flyout-section-label {
+    padding: 10px 14px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-400);
+  }
+
+  .flyout-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 14px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--gray-700);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .flyout-item:hover {
+    background: var(--gray-50);
+  }
+
+  .flyout-item .check {
+    width: 16px;
+    flex-shrink: 0;
+    font-size: 13px;
+    color: var(--primary-color);
+  }
+
+  .flyout-divider {
+    height: 1px;
+    background: var(--gray-200);
+    margin: 4px 0;
+  }
+
+  .flyout-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--gray-400);
+    border-top: 1px solid var(--gray-100);
+  }
+
+  .flyout-user-icon {
+    font-size: 14px;
+  }
+
+  /* Onboarding overlay */
+  .onboarding-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+    pointer-events: auto;
+    animation: panelFadeIn 0.2s ease both;
+  }
+
+  .onboarding-card {
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    background: white;
+    border-radius: 16px;
+    box-shadow: var(--shadow-xl);
+    padding: 28px 24px 24px;
+    text-align: center;
+  }
+
+  .onboarding-card h2 {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--gray-900);
+  }
+
+  .onboarding-card p {
+    margin: 0 0 20px;
+    font-size: 13px;
+    color: var(--gray-500);
+    line-height: 1.5;
+  }
+
+  .onboarding-input {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--gray-800);
+    outline: none;
+    transition: border-color 0.15s;
+    box-sizing: border-box;
+    margin-bottom: 16px;
+  }
+
+  .onboarding-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+  }
+
+  .onboarding-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .onboarding-submit {
+    flex: 1;
+    padding: 10px 16px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .onboarding-submit:hover {
+    background: var(--primary-hover);
+  }
+
+  .onboarding-skip {
+    padding: 10px 16px;
+    background: transparent;
+    color: var(--gray-500);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .onboarding-skip:hover {
+    background: var(--gray-50);
+    color: var(--gray-700);
+  }
 
   /* Markers layer — fixed fullscreen, pointer-events pass through */
   .markers-layer {

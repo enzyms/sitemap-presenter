@@ -337,18 +337,19 @@
 
   <!-- Test sidebar -->
   <div class="test-sidebar">
-    <h4>Testing Info</h4>
-    <p>API Key being used:</p>
-    <code>YOUR_SITE_API_KEY</code>
-    <p style="margin-top: 15px; font-size: 11px; color: #999;">
-      Create a site in your Supabase database to get an API key.
+    <h4>Testing Checklist</h4>
+    <p><strong>Onboarding:</strong> Shows on first visit. Enter name or skip. Reload &rarr; should NOT show again.</p>
+    <p><strong>Split button:</strong> Left = placement mode. Right (hamburger) = flyout menu.</p>
+    <p><strong>Flyout menu:</strong> View filter (Feedbacks / Archives). Person filter (Everyone / Mine). Change name.</p>
+    <p style="margin-top: 10px; font-size: 11px; color: #999;">
+      <button onclick="localStorage.removeItem('feedback-widget-onboarding-done'); localStorage.removeItem('feedback-widget-user-name'); location.reload();" style="font-size:11px; cursor:pointer;">Reset onboarding</button>
     </p>
   </div>
 
   <!-- Feedback Widget (loaded from dist after build) -->
   <script
     src="../dist/widget.js"
-    data-api-key="YOUR_SITE_API_KEY"
+    data-api-key="site_5ae8304e8ada458c8fa91bb109f4fa5e"
     data-position="bottom-right"
   ></script>
 </body>

@@ -27,6 +27,7 @@ export class FeedbackAPI {
   private sessionId: string | null = null;
   private userId: string | null = null;
   private realtimeChannel: RealtimeChannel | null = null;
+  private defaultName: string | null = null;
 
   constructor(supabaseUrl?: string, supabaseAnonKey?: string) {
     this.supabase = createClient(
@@ -72,6 +73,25 @@ export class FeedbackAPI {
     }
   }
 
+  getUserId(): string | null {
+    return this.userId;
+  }
+
+  setDefaultName(name: string | null): void {
+    this.defaultName = name;
+  }
+
+  async updateUserName(name: string): Promise<void> {
+    if (!this.userId) return;
+    const { error } = await this.supabase
+      .from('anonymous_users')
+      .update({ name })
+      .eq('id', this.userId);
+    if (error) {
+      console.error('Failed to update user name:', error);
+    }
+  }
+
   private async ensureUser(name?: string, email?: string): Promise<string> {
     if (this.userId) return this.userId;
 
@@ -93,7 +113,7 @@ export class FeedbackAPI {
       .from('anonymous_users')
       .insert({
         session_id: this.sessionId,
-        name: name || null,
+        name: name || this.defaultName || null,
         email: email || null,
         user_agent: navigator.userAgent
       })
