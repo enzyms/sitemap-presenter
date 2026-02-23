@@ -1229,7 +1229,7 @@ export class FeedbackWidget extends HTMLElement {
         <input class="onboarding-input" type="text" placeholder="Your name or nickname" maxlength="50" />
         <div class="onboarding-actions">
           <button class="onboarding-submit">Get started</button>
-          <button class="onboarding-skip">Skip</button>
+          <button class="onboarding-skip">Cancel</button>
         </div>
       </div>
     `;
@@ -1242,16 +1242,16 @@ export class FeedbackWidget extends HTMLElement {
 
     const isFirstTime = !this.userName;
     submit.addEventListener('click', () => this.completeOnboarding(input.value.trim(), isFirstTime));
-    skip.addEventListener('click', () => this.completeOnboarding(null, isFirstTime));
+    skip.addEventListener('click', () => this.completeOnboarding(null, false));
 
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.completeOnboarding(input.value.trim(), isFirstTime);
-      if (e.key === 'Escape') this.completeOnboarding(null, isFirstTime);
+      if (e.key === 'Escape') this.completeOnboarding(null, false);
     });
 
     // Click on overlay background dismisses
     this.onboardingOverlay.addEventListener('click', (e) => {
-      if (e.target === this.onboardingOverlay) this.completeOnboarding(null, isFirstTime);
+      if (e.target === this.onboardingOverlay) this.completeOnboarding(null, false);
     });
 
     this.container.appendChild(this.onboardingOverlay);
