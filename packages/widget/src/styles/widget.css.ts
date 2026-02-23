@@ -87,6 +87,10 @@ export const widgetStyles = `
     color: white;
   }
 
+  .feedback-button-main .count-secondary.archived {
+    background: var(--gray-400);
+  }
+
   .feedback-button-menu {
     display: flex;
     align-items: center;

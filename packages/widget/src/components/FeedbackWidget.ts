@@ -375,6 +375,8 @@ export class FeedbackWidget extends HTMLElement {
       return true;
     }).length;
 
+    secondaryEl.classList.toggle('archived', effectiveViewFilter === 'archived');
+
     if (secondaryCount > 0) {
       secondaryEl.textContent = String(secondaryCount);
       secondaryEl.style.display = 'inline';
