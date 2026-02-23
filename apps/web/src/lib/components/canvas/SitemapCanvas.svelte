@@ -218,6 +218,8 @@
 		nodesDraggable={!sitemapStore.isLayoutLocked}
 		selectionOnDrag
 		panOnDrag={[1, 2]}
+		panOnScroll
+		zoomOnScroll={false}
 		selectionMode={SelectionMode.Partial}
 		defaultEdgeOptions={{
 			type: 'smoothstep',

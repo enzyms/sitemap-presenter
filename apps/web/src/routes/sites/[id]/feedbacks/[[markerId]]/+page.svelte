@@ -21,6 +21,7 @@
 	let pageFilter = $state<string | null>(null);
 	let commentText: Record<string, string> = $state({});
 	let openMenuId = $state<string | null>(null);
+	let showCommentInputId = $state<string | null>(null);
 
 	// YouTrack / Autofix modals
 	let showYoutrackModal = $state<FeedbackMarker | null>(null);
@@ -287,7 +288,7 @@
 
 						<div class="space-y-4">
 							{#each pageMarkers as marker (marker.id)}
-								<div id="marker-{marker.id}" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+								<div id="marker-{marker.id}" class="bg-white rounded-lg shadow-sm border border-gray-200">
 									<!-- Marker header row -->
 									<div class="p-4">
 										<div class="flex items-start gap-3">
@@ -426,6 +427,15 @@
 															</button>
 														{/if}
 														<button
+															onclick={() => { showCommentInputId = showCommentInputId === marker.id ? null : marker.id; openMenuId = null; }}
+															class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+														>
+															<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+															</svg>
+															Add a comment
+														</button>
+														<button
 															onclick={(e) => { e.stopPropagation(); openMenuId = null; handleDelete(marker.id); }}
 															class="w-full px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
 														>
@@ -455,27 +465,29 @@
 											</div>
 										{/if}
 
-										<!-- Add comment -->
-										<div class="flex gap-2">
-											<input
-												type="text"
-												bind:value={commentText[marker.id]}
-												placeholder="Add a comment..."
-												class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-												onkeydown={(e) => {
-													if (e.key === 'Enter' && commentText[marker.id]?.trim()) {
-														handleCommentSubmit(marker.id);
-													}
-												}}
-											/>
-											<button
-												onclick={() => handleCommentSubmit(marker.id)}
-												disabled={!commentText[marker.id]?.trim()}
-												class="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-											>
-												Send
-											</button>
-										</div>
+										<!-- Add comment (toggled from kebab menu) -->
+										{#if showCommentInputId === marker.id}
+											<div class="flex gap-2">
+												<input
+													type="text"
+													bind:value={commentText[marker.id]}
+													placeholder="Add a comment..."
+													class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+													onkeydown={(e) => {
+														if (e.key === 'Enter' && commentText[marker.id]?.trim()) {
+															handleCommentSubmit(marker.id);
+														}
+													}}
+												/>
+												<button
+													onclick={() => handleCommentSubmit(marker.id)}
+													disabled={!commentText[marker.id]?.trim()}
+													class="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+												>
+													Send
+												</button>
+											</div>
+										{/if}
 									</div>
 								</div>
 							{/each}
