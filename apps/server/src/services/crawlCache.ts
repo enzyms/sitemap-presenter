@@ -25,7 +25,7 @@ export async function loadPreviousCrawl(siteId: string): Promise<Map<string, Cac
 			.from('site_crawl_cache')
 			.select('nodes')
 			.eq('site_id', siteId)
-			.single();
+			.maybeSingle();
 
 		if (error || !data?.nodes) return cache;
 
@@ -113,7 +113,7 @@ export async function loadPreviousUrls(siteId: string): Promise<string[]> {
 			.from('site_crawl_cache')
 			.select('nodes')
 			.eq('site_id', siteId)
-			.single();
+			.maybeSingle();
 
 		if (error || !data?.nodes) return [];
 

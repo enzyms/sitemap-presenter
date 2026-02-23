@@ -68,7 +68,7 @@ export const layoutPositions = {
 				.select('positions')
 				.eq('site_id', siteId)
 				.eq('layout_mode', layoutMode)
-				.single();
+				.maybeSingle();
 
 			if (!error && data?.positions) {
 				// Write-through to localStorage for instant loads
@@ -127,7 +127,7 @@ export const layoutPositions = {
 			.select('is_locked')
 			.eq('site_id', siteId)
 			.eq('layout_mode', layoutMode)
-			.single();
+			.maybeSingle();
 
 		const newLocked = !(data?.is_locked ?? false);
 
@@ -159,7 +159,7 @@ export const layoutPositions = {
 				.select('is_locked, updated_by, updated_at')
 				.eq('site_id', siteId)
 				.eq('layout_mode', layoutMode)
-				.single();
+				.maybeSingle();
 
 			if (!error && data) {
 				return {
