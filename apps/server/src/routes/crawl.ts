@@ -63,7 +63,9 @@ router.post('/start', async (req: Request, res: Response) => {
 		...(includeUrls.length > 0 && { includeUrls }),
 		...(config.siteId && { siteId: config.siteId }),
 		...(config.mode && { mode: config.mode }),
-		...(config.crawlMode && { crawlMode: config.crawlMode })
+		...(config.crawlMode && { crawlMode: config.crawlMode }),
+		...(config.httpUser && { httpUser: config.httpUser }),
+		...(config.httpPassword && { httpPassword: config.httpPassword })
 	});
 
 	// Return session ID immediately
