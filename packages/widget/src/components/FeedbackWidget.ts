@@ -1240,24 +1240,25 @@ export class FeedbackWidget extends HTMLElement {
     const submit = this.onboardingOverlay.querySelector('.onboarding-submit') as HTMLButtonElement;
     const skip = this.onboardingOverlay.querySelector('.onboarding-skip') as HTMLButtonElement;
 
-    submit.addEventListener('click', () => this.completeOnboarding(input.value.trim()));
-    skip.addEventListener('click', () => this.completeOnboarding(null));
+    const isFirstTime = !this.userName;
+    submit.addEventListener('click', () => this.completeOnboarding(input.value.trim(), isFirstTime));
+    skip.addEventListener('click', () => this.completeOnboarding(null, isFirstTime));
 
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') this.completeOnboarding(input.value.trim());
-      if (e.key === 'Escape') this.completeOnboarding(null);
+      if (e.key === 'Enter') this.completeOnboarding(input.value.trim(), isFirstTime);
+      if (e.key === 'Escape') this.completeOnboarding(null, isFirstTime);
     });
 
     // Click on overlay background dismisses
     this.onboardingOverlay.addEventListener('click', (e) => {
-      if (e.target === this.onboardingOverlay) this.completeOnboarding(null);
+      if (e.target === this.onboardingOverlay) this.completeOnboarding(null, isFirstTime);
     });
 
     this.container.appendChild(this.onboardingOverlay);
     requestAnimationFrame(() => input.focus());
   }
 
-  private completeOnboarding(name: string | null) {
+  private completeOnboarding(name: string | null, enterPlacement = true) {
     // Save name if provided
     if (name) {
       this.userName = name;
@@ -1275,6 +1276,11 @@ export class FeedbackWidget extends HTMLElement {
     if (this.onboardingOverlay) {
       this.onboardingOverlay.remove();
       this.onboardingOverlay = null;
+    }
+
+    // Auto-enter placement mode so the user can immediately drop a pin
+    if (enterPlacement && !this.isPlacementMode) {
+      this.enterPlacementMode();
     }
   }
 
